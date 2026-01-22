@@ -59,30 +59,30 @@ const adminNavItems: NavItem[] = [
   // Management
   { labelKey: 'nav.schools', path: '/admin/schools', icon: School, section: 'management' },
   { labelKey: 'nav.users', path: '/admin/users', icon: Users, section: 'management' },
-  { labelKey: 'nav.subscriptions', path: '/admin/subscriptions', icon: Building2, section: 'management' },
+  // { labelKey: 'nav.subscriptions', path: '/admin/subscriptions', icon: Building2, section: 'management' },
   
   // Financial
   { labelKey: 'nav.billing', path: '/admin/billing', icon: CreditCard, section: 'financial' },
   { labelKey: 'nav.invoices', path: '/admin/invoices', icon: FileBarChart, section: 'financial' },
-  { labelKey: 'nav.revenue', path: '/admin/revenue', icon: Wallet, section: 'financial' },
+  // { labelKey: 'nav.revenue', path: '/admin/revenue', icon: Wallet, section: 'financial' },
   
   // Communication
   { labelKey: 'nav.notifications', path: '/admin/notifications', icon: Bell, section: 'communication' },
   { labelKey: 'nav.announcements', path: '/admin/announcements', icon: Megaphone, section: 'communication' },
-  { labelKey: 'nav.messages', path: '/admin/messages', icon: MessageSquare, section: 'communication' },
-  { labelKey: 'nav.emailTemplates', path: '/admin/email-templates', icon: Mail, section: 'communication' },
+  // { labelKey: 'nav.messages', path: '/admin/messages', icon: MessageSquare, section: 'communication' },
+  // { labelKey: 'nav.emailTemplates', path: '/admin/email-templates', icon: Mail, section: 'communication' },
   
   // System
   { labelKey: 'nav.activityLog', path: '/admin/activity-log', icon: Activity, section: 'system' },
-  { labelKey: 'nav.security', path: '/admin/security', icon: Shield, section: 'system' },
-  { labelKey: 'nav.permissions', path: '/admin/permissions', icon: Lock, section: 'system' },
-  { labelKey: 'nav.integrations', path: '/admin/integrations', icon: Zap, section: 'system' },
-  { labelKey: 'nav.database', path: '/admin/database', icon: Database, section: 'system' },
+  // { labelKey: 'nav.security', path: '/admin/security', icon: Shield, section: 'system' },
+  // { labelKey: 'nav.permissions', path: '/admin/permissions', icon: Lock, section: 'system' },
+  // { labelKey: 'nav.integrations', path: '/admin/integrations', icon: Zap, section: 'system' },
+  // { labelKey: 'nav.database', path: '/admin/database', icon: Database, section: 'system' },
   
   // Settings
-  { labelKey: 'nav.settings', path: '/admin/settings', icon: Settings, section: 'settings' },
-  { labelKey: 'nav.localization', path: '/admin/localization', icon: Globe, section: 'settings' },
-  { labelKey: 'nav.support', path: '/admin/support', icon: HelpCircle, section: 'settings' },
+  // { labelKey: 'nav.settings', path: '/admin/settings', icon: Settings, section: 'settings' },
+  // { labelKey: 'nav.localization', path: '/admin/localization', icon: Globe, section: 'settings' },
+  // { labelKey: 'nav.support', path: '/admin/support', icon: HelpCircle, section: 'settings' },
 ];
 
 const allSchoolNavItems: NavItem[] = [
