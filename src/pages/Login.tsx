@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { LanguageToggle } from '@/components/LanguageToggle';
 import { useTranslation } from 'react-i18next';
+import * as React from "react";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -62,7 +63,7 @@ export default function Login() {
   };
 
   return (
-    <div className="flex min-h-screen bg-muted/30">
+    <div className="flex min-h-screen bg-muted/30 overflow-hidden w-full h-full">
       {/* Left Side - Form */}
       <div className="flex flex-1 flex-col justify-between p-6 lg:p-10 xl:p-16">
         {/* Header */}
@@ -262,7 +263,7 @@ export default function Login() {
                 <svg className="h-5 w-5 mr-2" viewBox="0 0 24 24">
                   <path fill="currentColor" d="M12 2C6.477 2 2 6.477 2 12c0 4.991 3.657 9.128 8.438 9.879V14.89h-2.54V12h2.54V9.797c0-2.506 1.492-3.89 3.777-3.89 1.094 0 2.238.195 2.238.195v2.46h-1.26c-1.243 0-1.63.771-1.63 1.562V12h2.773l-.443 2.89h-2.33v6.989C18.343 21.129 22 16.99 22 12c0-5.523-4.477-10-10-10z"/>
                 </svg>
-                Apple
+                Facebook
               </Button>
               <Button 
                 variant="outline" 
@@ -282,9 +283,6 @@ export default function Login() {
 
         {/* Footer */}
         <div className="flex items-center justify-between text-sm">
-          <p className="text-muted-foreground">
-            Have an account? <a href="#" className="text-foreground hover:underline font-medium">Sign in</a>
-          </p>
           <a href="#" className="text-foreground hover:underline font-medium">
             Terms & Conditions
           </a>
@@ -292,12 +290,12 @@ export default function Login() {
       </div>
 
       {/* Right Side - Image */}
-      <div className="hidden lg:flex lg:flex-1 relative overflow-hidden rounded-[15px] m-4">
+      <div className="hidden lg:flex lg:flex-1 relative overflow-hidden rounded-[15px]">
         <div className="absolute inset-0 bg-gradient-to-br from-primary/20 via-primary/10 to-accent/20" />
         <img
           src="https://images.unsplash.com/photo-1589156280159-27698a70f29e?w=1200&h=1600&fit=crop"
           alt="African professional"
-          className="h-full w-full object-cover"
+          style={{height: '100vh', width: '100%'}}
         />
         
         {/* Floating Cards */}
@@ -305,43 +303,10 @@ export default function Login() {
           <div className="flex items-center gap-3">
             <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
             <div>
-              <p className="font-semibold text-sm">Task Review With Team</p>
-              <p className="text-xs text-muted-foreground">09:30am-10:00am</p>
+              <p className="font-semibold text-sm">The School Operating System</p>
+              <p className="text-xs text-muted-foreground">The system every serious school runs on</p>
             </div>
           </div>
-        </div>
-        
-        <div className="absolute bottom-32 right-8 bg-card/95 backdrop-blur-sm rounded-xl p-4 shadow-lg border border-border/40 animate-fade-in" style={{ animationDelay: '0.2s' }}>
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <div className="h-2 w-2 rounded-full bg-warning" />
-              <p className="font-semibold text-sm">Daily Meeting</p>
-            </div>
-            <p className="text-xs text-muted-foreground">12:00pm-01:00pm</p>
-            <div className="flex -space-x-2 mt-2">
-              <img src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=32&h=32&fit=crop&crop=face" className="h-6 w-6 rounded-full ring-2 ring-card" alt="" />
-              <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=32&h=32&fit=crop&crop=face" className="h-6 w-6 rounded-full ring-2 ring-card" alt="" />
-              <img src="https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=32&h=32&fit=crop&crop=face" className="h-6 w-6 rounded-full ring-2 ring-card" alt="" />
-              <div className="h-6 w-6 rounded-full bg-muted ring-2 ring-card flex items-center justify-center text-xs font-medium">+3</div>
-            </div>
-          </div>
-        </div>
-        
-        <div className="absolute bottom-8 left-8 bg-card/95 backdrop-blur-sm rounded-2xl px-6 py-3 shadow-lg border border-border/40 animate-fade-in" style={{ animationDelay: '0.4s' }}>
-          <div className="flex gap-4 text-center">
-            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, i) => (
-              <div key={day} className={`${i === 3 ? 'text-primary font-semibold' : 'text-muted-foreground'}`}>
-                <p className="text-xs">{day}</p>
-                <p className="text-sm font-medium mt-1">{22 + i}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-        
-        {/* Floating Avatars */}
-        <div className="absolute top-1/3 right-16 flex flex-col gap-2 animate-fade-in" style={{ animationDelay: '0.3s' }}>
-          <img src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=48&h=48&fit=crop&crop=face" className="h-10 w-10 rounded-full ring-2 ring-card shadow-lg" alt="" />
-          <img src="https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=48&h=48&fit=crop&crop=face" className="h-10 w-10 rounded-full ring-2 ring-card shadow-lg ml-4" alt="" />
         </div>
       </div>
     </div>

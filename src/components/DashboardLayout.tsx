@@ -234,14 +234,14 @@ export function DashboardLayout({ role }: DashboardLayoutProps) {
             !sidebarOpen && !isMobile && 'justify-center'
           )}>
             <img
-              src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=80&h=80&fit=crop&crop=face"
+              src="https://randomuser.me/api/portraits/lego/1.jpg"
               alt="User avatar"
               className="h-9 w-9 rounded-full object-cover ring-2 ring-primary/20 shrink-0"
             />
             {sidebarOpen && (
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate">John Admin</p>
-                <p className="text-xs text-muted-foreground truncate">admin@school.com</p>
+                <p className="text-sm font-medium truncate">Grace Kalombo</p>
+                <p className="text-xs text-muted-foreground truncate">grace@school-network.co.za</p>
               </div>
             )}
           </div>
