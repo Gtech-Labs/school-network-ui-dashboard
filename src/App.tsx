@@ -71,12 +71,12 @@ const App = () => (
               <Route path="messages" element={<AdminMessages />} />
               <Route path="email-templates" element={<AdminEmailTemplates />} />
               <Route path="activity-log" element={<AdminActivityLog />} />
-              <Route path="security" element={<AdminSecurity />} />
-              <Route path="permissions" element={<AdminPermissions />} />
-              <Route path="integrations" element={<AdminIntegrations />} />
-              <Route path="database" element={<AdminDatabase />} />
-              <Route path="settings" element={<AdminSettings />} />
-              <Route path="localization" element={<AdminLocalization />} />
+              {/*<Route path="security" element={<AdminSecurity />} />*/}
+              {/*<Route path="permissions" element={<AdminPermissions />} />*/}
+              {/*<Route path="integrations" element={<AdminIntegrations />} />*/}
+              {/*<Route path="database" element={<AdminDatabase />} />*/}
+              {/*<Route path="settings" element={<AdminSettings />} />*/}
+              {/*<Route path="localization" element={<AdminLocalization />} />*/}
               <Route path="support" element={<AdminSupport />} />
             </Route>
 
