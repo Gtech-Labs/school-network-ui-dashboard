@@ -5,9 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Search, MoreVertical, Plus, Mail } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Search, MoreVertical, Plus, Mail, ChevronLeft, ChevronRight } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,6 +15,11 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
+import { AddStudentDialog } from '@/components/AddStudentDialog';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
+import StudentEditDialog, { StudentFormData } from '@/components/StudentEditDialog';
+
+const ITEMS_PER_PAGE = 9;
 
 export default function SchoolStudents() {
   const navigate = useNavigate();
@@ -25,6 +29,11 @@ export default function SchoolStudents() {
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [messageDialogOpen, setMessageDialogOpen] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<any>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [removeDialogOpen, setRemoveDialogOpen] = useState(false);
+  const [studentToRemove, setStudentToRemove] = useState<any>(null);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [studentToEdit, setStudentToEdit] = useState<any>(null);
 
   const filteredStudents = students.filter((student) =>
     student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -32,12 +41,9 @@ export default function SchoolStudents() {
     student.class.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleAddStudent = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const formData = new FormData(e.currentTarget);
-    toast.success(`${formData.get('name')} ${t('school.students.studentAdded')}`);
-    setAddDialogOpen(false);
-  };
+  const totalPages = Math.ceil(filteredStudents.length / ITEMS_PER_PAGE);
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const paginatedStudents = filteredStudents.slice(startIndex, startIndex + ITEMS_PER_PAGE);
 
   const handleViewDetails = (studentId: string) => {
     navigate(`/school/students/${studentId}`);
@@ -54,6 +60,28 @@ export default function SchoolStudents() {
     setMessageDialogOpen(false);
   };
 
+  const handleRemoveClick = (student: any) => {
+    setStudentToRemove(student);
+    setRemoveDialogOpen(true);
+  };
+
+  const handleConfirmRemove = () => {
+    if (studentToRemove) {
+      setStudents(students.filter((s) => s.id !== studentToRemove.id));
+      toast.success(`${studentToRemove.name} has been removed`);
+      setStudentToRemove(null);
+    }
+  };
+
+  const handleEditClick = (student: any) => {
+    setStudentToEdit(student);
+    setEditDialogOpen(true);
+  };
+
+  const handleEditSave = (_data: StudentFormData) => {
+    toast.success('Student information updated successfully');
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
@@ -61,47 +89,13 @@ export default function SchoolStudents() {
           <h2 className="text-3xl font-bold tracking-tight">{t('school.students.title')}</h2>
           <p className="text-muted-foreground">{t('school.students.subtitle')}</p>
         </div>
-        <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
-          <DialogTrigger asChild>
-            <Button className="rounded-lg">
-              <Plus className="mr-2 h-4 w-4" />
-              {t('school.students.addStudent')}
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-md rounded-xl">
-            <DialogHeader>
-              <DialogTitle>{t('school.students.addNewStudent')}</DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleAddStudent} className="space-y-4">
-              <div>
-                <Label htmlFor="name">{t('school.students.studentName')}</Label>
-                <Input id="name" name="name" required className="rounded-lg" />
-              </div>
-              <div>
-                <Label htmlFor="email">{t('common.email')}</Label>
-                <Input id="email" name="email" type="email" required className="rounded-lg" />
-              </div>
-              <div>
-                <Label htmlFor="class">{t('school.students.class')}</Label>
-                <Input id="class" name="class" required className="rounded-lg" />
-              </div>
-              <div>
-                <Label htmlFor="parentName">{t('school.students.parentName')}</Label>
-                <Input id="parentName" name="parentName" required className="rounded-lg" />
-              </div>
-              <div>
-                <Label htmlFor="parentEmail">{t('school.students.parentEmail')}</Label>
-                <Input id="parentEmail" name="parentEmail" type="email" required className="rounded-lg" />
-              </div>
-              <div>
-                <Label htmlFor="parentPhone">{t('school.students.parentPhone')}</Label>
-                <Input id="parentPhone" name="parentPhone" required className="rounded-lg" />
-              </div>
-              <Button type="submit" className="w-full rounded-lg">{t('school.students.addStudent')}</Button>
-            </form>
-          </DialogContent>
-        </Dialog>
+        <Button className="rounded-lg" onClick={() => setAddDialogOpen(true)}>
+          <Plus className="mr-2 h-4 w-4" />
+          {t('school.students.addStudent')}
+        </Button>
       </div>
+
+      <AddStudentDialog open={addDialogOpen} onOpenChange={setAddDialogOpen} />
 
       <Card className="shadow-md">
         <CardHeader>
@@ -111,7 +105,7 @@ export default function SchoolStudents() {
               <Input
                 placeholder={t('school.students.searchPlaceholder')}
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
                 className="pl-10 rounded-lg"
               />
             </div>
@@ -122,23 +116,23 @@ export default function SchoolStudents() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-border/60">
-                  <th className="pb-3 text-left text-sm font-semibold text-foreground">{t('common.name')}</th>
+                  <th className="pb-3 pl-3 text-left text-sm font-semibold text-foreground">{t('common.name')}</th>
                   <th className="pb-3 text-left text-sm font-semibold text-foreground">{t('school.students.class')}</th>
                   <th className="pb-3 text-left text-sm font-semibold text-foreground">{t('school.students.parent')}</th>
                   <th className="pb-3 text-left text-sm font-semibold text-foreground">{t('school.students.contact')}</th>
                   <th className="pb-3 text-left text-sm font-semibold text-foreground">{t('school.students.feesPaid')}</th>
                   <th className="pb-3 text-left text-sm font-semibold text-foreground">{t('common.status')}</th>
-                  <th className="pb-3 text-right text-sm font-semibold text-foreground">{t('common.actions')}</th>
+                  <th className="pb-3 text-right text-sm font-semibold text-foreground pr-3">{t('common.actions')}</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredStudents.map((student) => (
-                  <tr 
-                    key={student.id} 
+                {paginatedStudents.map((student) => (
+                  <tr
+                    key={student.id}
                     className="border-b border-border/40 last:border-0 cursor-pointer hover:bg-accent/50 transition-colors"
                     onClick={() => handleViewDetails(student.id)}
                   >
-                    <td className="py-4">
+                    <td className="py-4 pl-3">
                       <div>
                         <p className="font-medium text-foreground">{student.name}</p>
                         <p className="text-sm text-muted-foreground">{student.email}</p>
@@ -155,10 +149,7 @@ export default function SchoolStudents() {
                     <td className="py-4">
                       <div className="flex items-center gap-2">
                         <div className="h-2 w-24 overflow-hidden rounded-full bg-secondary/50">
-                          <div
-                            className="h-full bg-primary transition-all"
-                            style={{ width: `${student.feesPaid}%` }}
-                          />
+                          <div className="h-full bg-primary transition-all" style={{ width: `${student.feesPaid}%` }} />
                         </div>
                         <span className="text-sm text-foreground">{student.feesPaid}%</span>
                       </div>
@@ -168,7 +159,7 @@ export default function SchoolStudents() {
                         {t(`status.${student.status.toLowerCase()}`)}
                       </Badge>
                     </td>
-                    <td className="py-4 text-right" onClick={(e) => e.stopPropagation()}>
+                    <td className="py-4 text-right pr-3" onClick={(e) => e.stopPropagation()}>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="icon" className="rounded-lg">
@@ -179,16 +170,13 @@ export default function SchoolStudents() {
                           <DropdownMenuItem onClick={() => handleViewDetails(student.id)}>
                             {t('common.viewDetails')}
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => toast.success(t('common.edit'))}>
+                          <DropdownMenuItem onClick={() => handleEditClick(student)}>
                             {t('common.edit')}
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => handleSendMessage(student)}>
                             {t('common.sendMessage')}
                           </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => toast.success(`${student.name} ${t('common.remove').toLowerCase()}`)}
-                            className="text-destructive"
-                          >
+                          <DropdownMenuItem onClick={() => handleRemoveClick(student)} className="text-destructive">
                             {t('common.remove')}
                           </DropdownMenuItem>
                         </DropdownMenuContent>
@@ -199,6 +187,29 @@ export default function SchoolStudents() {
               </tbody>
             </table>
           </div>
+
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between mt-4 pt-4 border-t">
+              <p className="text-sm text-muted-foreground">
+                Showing {startIndex + 1} to {Math.min(startIndex + ITEMS_PER_PAGE, filteredStudents.length)} of {filteredStudents.length} students
+              </p>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))} disabled={currentPage === 1}>
+                  <ChevronLeft className="h-4 w-4 mr-1" /> Previous
+                </Button>
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                    <Button key={page} variant={page === currentPage ? 'default' : 'outline'} size="sm" onClick={() => setCurrentPage(page)} className="w-9">
+                      {page}
+                    </Button>
+                  ))}
+                </div>
+                <Button variant="outline" size="sm" onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))} disabled={currentPage === totalPages}>
+                  Next <ChevronRight className="h-4 w-4 ml-1" />
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -210,17 +221,12 @@ export default function SchoolStudents() {
           </DialogHeader>
           <form onSubmit={handleSendMessageSubmit} className="space-y-4">
             <div>
-              <Label htmlFor="subject">{t('common.subject')}</Label>
+              <label htmlFor="subject" className="text-sm font-medium">{t('common.subject')}</label>
               <Input id="subject" name="subject" required className="rounded-lg" />
             </div>
             <div>
-              <Label htmlFor="message">{t('common.message')}</Label>
-              <textarea 
-                id="message" 
-                name="message" 
-                className="w-full min-h-[120px] px-3 py-2 border rounded-lg border-input bg-background" 
-                required 
-              />
+              <label htmlFor="message" className="text-sm font-medium">{t('common.message')}</label>
+              <textarea id="message" name="message" className="w-full min-h-[120px] px-3 py-2 border rounded-lg border-input bg-background" required />
             </div>
             <Button type="submit" className="w-full rounded-lg">
               <Mail className="mr-2 h-4 w-4" />
@@ -229,6 +235,25 @@ export default function SchoolStudents() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={removeDialogOpen}
+        onOpenChange={setRemoveDialogOpen}
+        title="Remove Student"
+        description={`Are you sure you want to remove ${studentToRemove?.name}? This action cannot be undone.`}
+        onConfirm={handleConfirmRemove}
+        confirmLabel="Remove"
+        destructive
+      />
+
+      {studentToEdit && (
+        <StudentEditDialog
+          open={editDialogOpen}
+          onOpenChange={setEditDialogOpen}
+          student={studentToEdit}
+          onSave={handleEditSave}
+        />
+      )}
     </div>
   );
 }

@@ -2,6 +2,8 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
+      <module fileurl="file://$PROJECT_DIR$/../reseau-scolaire-mobile-app/.idea/reseau-scolaire-mobile-app.iml" filepath="$PROJECT_DIR$/../reseau-scolaire-mobile-app/.idea/reseau-scolaire-mobile-app.iml" />
+      <module fileurl="file://$PROJECT_DIR$/../school-app-core-api/.idea/school-app-core-api.iml" filepath="$PROJECT_DIR$/../school-app-core-api/.idea/school-app-core-api.iml" />
       <module fileurl="file://$PROJECT_DIR$/.idea/school-network-ui-dashboard.iml" filepath="$PROJECT_DIR$/.idea/school-network-ui-dashboard.iml" />
     </modules>
   </component>

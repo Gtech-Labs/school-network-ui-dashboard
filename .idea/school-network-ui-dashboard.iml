@@ -5,5 +5,7 @@
     <content url="file://$MODULE_DIR$" />
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
+    <orderEntry type="module" module-name="reseau-scolaire-mobile-app" />
+    <orderEntry type="module" module-name="school-app-core-api" />
   </component>
 </module>

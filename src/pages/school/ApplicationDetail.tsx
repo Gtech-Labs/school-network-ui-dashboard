@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
+import { DocumentViewerDialog } from '@/components/DocumentViewerDialog';
 
 const statusColors: Record<string, string> = {
   'Submitted': 'bg-blue-500/10 text-blue-500 border-blue-500/20',
@@ -41,6 +42,7 @@ export default function ApplicationDetail() {
   const [isStatusDialogOpen, setIsStatusDialogOpen] = useState(false);
   const [newStatus, setNewStatus] = useState<ApplicationStatus | ''>('');
   const [statusMessage, setStatusMessage] = useState('');
+  const [viewingDoc, setViewingDoc] = useState<{ name: string; type: string; uploadedDate: string; url: string } | null>(null);
 
   if (!application) {
     return (
@@ -170,7 +172,11 @@ export default function ApplicationDetail() {
               {application.documents.length > 0 ? (
                 <div className="space-y-3">
                   {application.documents.map((doc, index) => (
-                    <div key={index} className="flex items-center justify-between p-3 border border-border rounded-lg hover:bg-accent/50 transition-colors">
+                    <div
+                      key={index}
+                      className="flex items-center justify-between p-3 border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer"
+                      onClick={() => setViewingDoc(doc)}
+                    >
                       <div className="flex items-center gap-3 flex-1 min-w-0">
                         <FileText className="h-5 w-5 text-muted-foreground flex-shrink-0" />
                         <div className="min-w-0 flex-1">
@@ -182,7 +188,7 @@ export default function ApplicationDetail() {
                           </div>
                         </div>
                       </div>
-                      <Button variant="ghost" size="icon" asChild>
+                      <Button variant="ghost" size="icon" onClick={(e) => e.stopPropagation()} asChild>
                         <a href={doc.url} download>
                           <Download className="h-4 w-4" />
                         </a>
@@ -195,6 +201,12 @@ export default function ApplicationDetail() {
               )}
             </CardContent>
           </Card>
+
+          <DocumentViewerDialog
+            open={!!viewingDoc}
+            onOpenChange={(open) => !open && setViewingDoc(null)}
+            document={viewingDoc}
+          />
         </div>
 
         {/* Status and Actions */}

@@ -48,6 +48,7 @@ const STEPS = [
 export function ParentEditDialog({ open, onOpenChange, parent, onSave, mode }: ParentEditDialogProps) {
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState({
+    parentId: '',
     fullName: '',
     relationship: 'Father' as 'Mother' | 'Father' | 'Guardian',
     phone: '',
@@ -61,10 +62,13 @@ export function ParentEditDialog({ open, onOpenChange, parent, onSave, mode }: P
 
   // Child linking state
   const [selectedStudent, setSelectedStudent] = useState('');
+  const [childSearchTerm, setChildSearchTerm] = useState('');
+  const [childDropdownOpen, setChildDropdownOpen] = useState(false);
 
   useEffect(() => {
     if (parent && mode === 'edit') {
       setFormData({
+        parentId: parent.id || '',
         fullName: parent.fullName || '',
         relationship: parent.relationship || 'Father',
         phone: parent.phone || '',
@@ -77,6 +81,7 @@ export function ParentEditDialog({ open, onOpenChange, parent, onSave, mode }: P
       });
     } else {
       setFormData({
+        parentId: '',
         fullName: '',
         relationship: 'Father',
         phone: '',
@@ -178,6 +183,15 @@ export function ParentEditDialog({ open, onOpenChange, parent, onSave, mode }: P
         return (
           <div className="space-y-4">
             <div className="space-y-2">
+              <Label htmlFor="parentId">Parent ID *</Label>
+              <Input
+                id="parentId"
+                value={formData.parentId || ''}
+                onChange={(e) => handleInputChange('parentId', e.target.value)}
+                placeholder="e.g. PAR-001"
+              />
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="fullName">Full Name *</Label>
               <Input
                 id="fullName"
@@ -232,24 +246,49 @@ export function ParentEditDialog({ open, onOpenChange, parent, onSave, mode }: P
         );
 
       case 3:
+        const filteredAvailableStudents = childSearchTerm
+          ? availableStudents.filter((s) =>
+              s.name.toLowerCase().includes(childSearchTerm.toLowerCase())
+            )
+          : availableStudents;
+
         return (
           <div className="space-y-4">
             <div className="space-y-2">
               <Label>Link Children *</Label>
               <div className="flex gap-2">
-                <Select value={selectedStudent} onValueChange={setSelectedStudent}>
-                  <SelectTrigger className="flex-1">
-                    <SelectValue placeholder="Select a student" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableStudents.map((student) => (
-                      <SelectItem key={student.id} value={student.id}>
-                        {student.name} - {student.class}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button type="button" onClick={handleAddChild} disabled={!selectedStudent}>
+                <div className="flex-1 relative">
+                  <Input
+                    placeholder="Search student by name..."
+                    value={childSearchTerm}
+                    onChange={(e) => setChildSearchTerm(e.target.value)}
+                    onFocus={() => setChildDropdownOpen(true)}
+                  />
+                  {childDropdownOpen && filteredAvailableStudents.length > 0 && (
+                    <div className="absolute z-50 w-full mt-1 bg-popover border border-border rounded-md shadow-md max-h-[240px] overflow-y-auto">
+                      {filteredAvailableStudents.slice(0, 6).map((student) => (
+                        <button
+                          key={student.id}
+                          type="button"
+                          className="w-full text-left px-3 py-2 text-sm hover:bg-accent/50 transition-colors"
+                          onClick={() => {
+                            setSelectedStudent(student.id);
+                            setChildSearchTerm(student.name);
+                            setChildDropdownOpen(false);
+                          }}
+                        >
+                          {student.name} - {student.class}
+                        </button>
+                      ))}
+                      {filteredAvailableStudents.length > 6 && (
+                        <div className="px-3 py-2 text-xs text-muted-foreground border-t">
+                          Scroll or type to find more...
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <Button type="button" onClick={() => { handleAddChild(); setChildSearchTerm(''); }} disabled={!selectedStudent}>
                   <Plus className="h-4 w-4" />
                 </Button>
               </div>
