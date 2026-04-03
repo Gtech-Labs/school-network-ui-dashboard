@@ -102,51 +102,6 @@ const App = () => (
               </Route>
             </Route>
 
-
-            {/*<Route path="/" element={<Login />} />*/}
-            
-            {/*<Route path="/admin" element={<DashboardLayout role="admin" />}>*/}
-            {/*  <Route index element={<AdminOverview />} />*/}
-            {/*  /!*<Route path="analytics" element={<AdminAnalytics />} />*!/*/}
-            {/*  <Route path="schools" element={<AdminSchools />} />*/}
-            {/*  <Route path="schools/:id" element={<AdminSchoolDetail />} />*/}
-            {/*  <Route path="users" element={<AdminUsers />} />*/}
-            {/*  <Route path="subscriptions" element={<AdminSubscriptions />} />*/}
-            {/*  <Route path="billing" element={<AdminBilling />} />*/}
-            {/*  <Route path="invoices" element={<AdminInvoices />} />*/}
-            {/*  <Route path="revenue" element={<AdminRevenue />} />*/}
-            {/*  <Route path="notifications" element={<AdminNotifications />} />*/}
-            {/*  <Route path="announcements" element={<AdminAnnouncements />} />*/}
-            {/*  <Route path="messages" element={<AdminMessages />} />*/}
-            {/*  <Route path="email-templates" element={<AdminEmailTemplates />} />*/}
-            {/*  <Route path="activity-log" element={<AdminActivityLog />} />*/}
-            {/*  /!*<Route path="security" element={<AdminSecurity />} />*!/*/}
-            {/*  /!*<Route path="permissions" element={<AdminPermissions />} />*!/*/}
-            {/*  /!*<Route path="integrations" element={<AdminIntegrations />} />*!/*/}
-            {/*  /!*<Route path="database" element={<AdminDatabase />} />*!/*/}
-            {/*  /!*<Route path="settings" element={<AdminSettings />} />*!/*/}
-            {/*  /!*<Route path="localization" element={<AdminLocalization />} />*!/*/}
-            {/*  <Route path="support" element={<AdminSupport />} />*/}
-            {/*</Route>*/}
-
-            <Route path="/school" element={<DashboardLayout role="school" />}>
-              <Route index element={<SchoolOverview />} />
-              <Route path="students" element={<SchoolStudents />} />
-              <Route path="students/:id" element={<StudentDetail />} />
-              <Route path="teachers" element={<SchoolTeachers />} />
-              <Route path="parents" element={<SchoolParents />} />
-              <Route path="parents/:id" element={<ParentDetail />} />
-              <Route path="payments" element={<SchoolPayments />} />
-              <Route path="announcements" element={<SchoolAnnouncements />} />
-              <Route path="timetable" element={<SchoolTimetable />} />
-              <Route path="applications" element={<SchoolApplications />} />
-              <Route path="applications/:id" element={<ApplicationDetail />} />
-              <Route path="activity-log" element={<SchoolActivityLog />} />
-              <Route path="calendar" element={<SchoolCalendar />} />
-              <Route path="academic-progress" element={<SchoolAcademicProgress />} />
-              <Route path="attendance" element={<SchoolAttendance />} />
-            </Route>
-
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
