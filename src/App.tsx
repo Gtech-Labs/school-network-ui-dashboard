@@ -43,42 +43,91 @@ import ParentDetail from "./pages/school/ParentDetail";
 import SchoolAcademicProgress from "./pages/school/SchoolAcademicProgress";
 import SchoolAttendance from "./pages/school/SchoolAttendance";
 import NotFound from "./pages/NotFound";
+import {AuthProvider} from "@/context/AuthContext.tsx";
+import {ProtectedRoute, PublicRoute} from "@/components/AuthGuards.tsx";
 
 const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
+    <AuthProvider>
     <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
       <TooltipProvider>
         <Toaster />
         <Sonner />
         <BrowserRouter>
           <Routes>
-            <Route path="/" element={<Login />} />
-            
-            <Route path="/admin" element={<DashboardLayout role="admin" />}>
-              <Route index element={<AdminOverview />} />
-              {/*<Route path="analytics" element={<AdminAnalytics />} />*/}
-              <Route path="schools" element={<AdminSchools />} />
-              <Route path="schools/:id" element={<AdminSchoolDetail />} />
-              <Route path="users" element={<AdminUsers />} />
-              <Route path="subscriptions" element={<AdminSubscriptions />} />
-              <Route path="billing" element={<AdminBilling />} />
-              <Route path="invoices" element={<AdminInvoices />} />
-              <Route path="revenue" element={<AdminRevenue />} />
-              <Route path="notifications" element={<AdminNotifications />} />
-              <Route path="announcements" element={<AdminAnnouncements />} />
-              <Route path="messages" element={<AdminMessages />} />
-              <Route path="email-templates" element={<AdminEmailTemplates />} />
-              <Route path="activity-log" element={<AdminActivityLog />} />
-              {/*<Route path="security" element={<AdminSecurity />} />*/}
-              {/*<Route path="permissions" element={<AdminPermissions />} />*/}
-              {/*<Route path="integrations" element={<AdminIntegrations />} />*/}
-              {/*<Route path="database" element={<AdminDatabase />} />*/}
-              {/*<Route path="settings" element={<AdminSettings />} />*/}
-              {/*<Route path="localization" element={<AdminLocalization />} />*/}
-              <Route path="support" element={<AdminSupport />} />
+            {/* PUBLIC ROUTES: Only accessible if NOT logged in */}
+            <Route element={<PublicRoute />}>
+              <Route path="/" element={<Login />} />
             </Route>
+
+            {/* PROTECTED ROUTES: Only accessible if logged in */}
+            <Route element={<ProtectedRoute />}>
+
+              {/* Admin Section */}
+              <Route path="/admin" element={<DashboardLayout role="admin" />}>
+                <Route index element={<AdminOverview />} />
+                <Route path="schools" element={<AdminSchools />} />
+                <Route path="schools/:id" element={<AdminSchoolDetail />} />
+                <Route path="users" element={<AdminUsers />} />
+                <Route path="subscriptions" element={<AdminSubscriptions />} />
+                <Route path="billing" element={<AdminBilling />} />
+                <Route path="invoices" element={<AdminInvoices />} />
+                <Route path="revenue" element={<AdminRevenue />} />
+                <Route path="notifications" element={<AdminNotifications />} />
+                <Route path="announcements" element={<AdminAnnouncements />} />
+                <Route path="messages" element={<AdminMessages />} />
+                <Route path="email-templates" element={<AdminEmailTemplates />} />
+                <Route path="activity-log" element={<AdminActivityLog />} />
+                <Route path="support" element={<AdminSupport />} />
+              </Route>
+
+              <Route path="/school" element={<DashboardLayout role="school" />}>
+                <Route index element={<SchoolOverview />} />
+                <Route path="students" element={<SchoolStudents />} />
+                <Route path="students/:id" element={<StudentDetail />} />
+                <Route path="teachers" element={<SchoolTeachers />} />
+                <Route path="parents" element={<SchoolParents />} />
+                <Route path="parents/:id" element={<ParentDetail />} />
+                <Route path="payments" element={<SchoolPayments />} />
+                <Route path="announcements" element={<SchoolAnnouncements />} />
+                <Route path="timetable" element={<SchoolTimetable />} />
+                <Route path="applications" element={<SchoolApplications />} />
+                <Route path="applications/:id" element={<ApplicationDetail />} />
+                <Route path="activity-log" element={<SchoolActivityLog />} />
+                <Route path="calendar" element={<SchoolCalendar />} />
+                <Route path="academic-progress" element={<SchoolAcademicProgress />} />
+                <Route path="attendance" element={<SchoolAttendance />} />
+              </Route>
+            </Route>
+
+
+            {/*<Route path="/" element={<Login />} />*/}
+            
+            {/*<Route path="/admin" element={<DashboardLayout role="admin" />}>*/}
+            {/*  <Route index element={<AdminOverview />} />*/}
+            {/*  /!*<Route path="analytics" element={<AdminAnalytics />} />*!/*/}
+            {/*  <Route path="schools" element={<AdminSchools />} />*/}
+            {/*  <Route path="schools/:id" element={<AdminSchoolDetail />} />*/}
+            {/*  <Route path="users" element={<AdminUsers />} />*/}
+            {/*  <Route path="subscriptions" element={<AdminSubscriptions />} />*/}
+            {/*  <Route path="billing" element={<AdminBilling />} />*/}
+            {/*  <Route path="invoices" element={<AdminInvoices />} />*/}
+            {/*  <Route path="revenue" element={<AdminRevenue />} />*/}
+            {/*  <Route path="notifications" element={<AdminNotifications />} />*/}
+            {/*  <Route path="announcements" element={<AdminAnnouncements />} />*/}
+            {/*  <Route path="messages" element={<AdminMessages />} />*/}
+            {/*  <Route path="email-templates" element={<AdminEmailTemplates />} />*/}
+            {/*  <Route path="activity-log" element={<AdminActivityLog />} />*/}
+            {/*  /!*<Route path="security" element={<AdminSecurity />} />*!/*/}
+            {/*  /!*<Route path="permissions" element={<AdminPermissions />} />*!/*/}
+            {/*  /!*<Route path="integrations" element={<AdminIntegrations />} />*!/*/}
+            {/*  /!*<Route path="database" element={<AdminDatabase />} />*!/*/}
+            {/*  /!*<Route path="settings" element={<AdminSettings />} />*!/*/}
+            {/*  /!*<Route path="localization" element={<AdminLocalization />} />*!/*/}
+            {/*  <Route path="support" element={<AdminSupport />} />*/}
+            {/*</Route>*/}
 
             <Route path="/school" element={<DashboardLayout role="school" />}>
               <Route index element={<SchoolOverview />} />
@@ -104,6 +153,7 @@ const App = () => (
         </BrowserRouter>
       </TooltipProvider>
     </ThemeProvider>
+    </AuthProvider>
   </QueryClientProvider>
 );
 

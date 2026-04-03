@@ -24,7 +24,7 @@ export default function AdminSchools() {
     const [searchQuery, setSearchQuery] = useState('');
     const [addDialogOpen, setAddDialogOpen] = useState(false);
 
-    const {data: schools, isLoading, isError, error} = useApiQuery<any[]>(
+    const {data: schools, isLoading, isError, error} = useApiQuery<never[]>(
         ['schools'],
         '/schools',
         {
@@ -34,8 +34,8 @@ export default function AdminSchools() {
 
     console.log("Schools,", schools)
     const filteredSchools = schools?.filter((school) =>
-        school.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        school.email.toLowerCase().includes(searchQuery.toLowerCase())
+        school?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        school?.email?.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
     const handleAddSchool = (e: React.FormEvent<HTMLFormElement>) => {

@@ -13,14 +13,27 @@ import {LanguageToggle} from '@/components/LanguageToggle.tsx';
 import {useTranslation} from 'react-i18next';
 import * as React from "react";
 import {useSignInMutation} from '@/hooks/auth/use-auth-mutation.ts';
+import {useApiQuery} from "@/hooks/use-api-query.ts";
+import { useAuth } from '@/context/AuthContext';
 import {SignInRequest} from '@/types/auth';
 
 export default function Login() {
     const {mutate, isPending, error} = useSignInMutation();
+    const { login } = useAuth();
 
     const navigate = useNavigate();
     const {t} = useTranslation();
     const [showPassword, setShowPassword] = useState(false);
+
+    // check if the school ID of the user exists in the db
+
+    const {data: schools, isLoading, isError} = useApiQuery<never[]>(
+        ['schools'],
+        '/schools',
+        {
+            staleTime: 1000 * 60 // 1 minute
+        }
+    );
 
     const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
@@ -32,13 +45,23 @@ export default function Login() {
         }
         mutate(data, {
             onSuccess: (data) => {
-                console.log("SUCCESS", data)
+                login(data.accessToken);
                 toast.success("Login successful");
+                const tenantId = data?.user?.tenant_id;
+                // check if the tenant ID exists in our DB
+
+                const isExisting = (!isLoading && !isError && schools && schools.length > 0) && schools.some(school => school.tenant_id === tenantId);
+
                 localStorage.setItem('token', data.accessToken);
-                if(data?.user?.organization === 'sn_network'){
+                if(tenantId && tenantId === 'sn_network'){
+                    console.log('Redirecting to admin dashboard');
                     navigate('/admin');
+                }else if(isExisting){
+                    navigate('/school', {replace: true});
+                }else{
+                    // Redirect them to a page telling them that their school is not yet configured.
+                    navigate('/', {replace: true});
                 }
-                navigate('/admin');
             },
             onError: (error) => {
                 // Handle errors (like wrong password)

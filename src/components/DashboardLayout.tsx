@@ -39,6 +39,7 @@ import { cn } from '@/lib/utils';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { LanguageToggle } from '@/components/LanguageToggle';
 import { getSchoolFeatures, getCurrentSchoolId } from '@/lib/schoolFeatures';
+import { useAuth } from '@/context/AuthContext.tsx';
 
 interface NavItem {
   labelKey: string;
@@ -118,6 +119,7 @@ export function DashboardLayout({ role }: DashboardLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const navigate = useNavigate();
+  const {logout} = useAuth();
   const { t } = useTranslation();
   
   // Get filtered nav items based on enabled features for school role
@@ -155,9 +157,6 @@ export function DashboardLayout({ role }: DashboardLayoutProps) {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  const handleLogout = () => {
-    navigate('/');
-  };
 
   const toggleSidebar = () => {
     setSidebarOpen(!sidebarOpen);
@@ -249,7 +248,7 @@ export function DashboardLayout({ role }: DashboardLayoutProps) {
           <div className="border-t border-border/40 p-4">
             <Button
               variant="ghost"
-              onClick={handleLogout}
+              onClick={logout}
               className={cn(
                 'w-full text-muted-foreground hover:bg-accent hover:text-accent-foreground rounded-lg',
                 sidebarOpen ? 'justify-start' : 'justify-center px-0'
