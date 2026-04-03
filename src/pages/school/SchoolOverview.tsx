@@ -1,13 +1,20 @@
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { GraduationCap, UserCircle, Banknote, TrendingUp } from 'lucide-react';
 import { StatCard } from '@/components/StatCard';
 import { CircularProgress } from '@/components/CircularProgress';
 import { QuickActions } from '@/components/QuickActions';
+import { AddStudentDialog } from '@/components/AddStudentDialog';
+import { GenerateReportDialog } from '@/components/GenerateReportDialog';
 import { mockStudents, mockTeachers, mockStudentPayments } from '@/lib/mockData';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useTranslation } from 'react-i18next';
 
 export default function SchoolOverview() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
+  const [addStudentOpen, setAddStudentOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
   
   const totalStudents = mockStudents.length;
   const activeStudents = mockStudents.filter((s) => s.status === 'Active').length;
@@ -25,7 +32,14 @@ export default function SchoolOverview() {
       </div>
 
       {/* Quick Actions */}
-      <QuickActions />
+      <QuickActions
+        onAddStudent={() => setAddStudentOpen(true)}
+        onSendMessage={() => navigate('/school/announcements')}
+        onGenerateReport={() => setReportOpen(true)}
+        onScheduleEvent={() => navigate('/school/calendar')}
+      />
+      <AddStudentDialog open={addStudentOpen} onOpenChange={setAddStudentOpen} />
+      <GenerateReportDialog open={reportOpen} onOpenChange={setReportOpen} />
 
       {/* Stat Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">

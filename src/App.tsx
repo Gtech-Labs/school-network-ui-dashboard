@@ -4,7 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
-import Login from "./pages/Login";
+import Login from "./pages/Login.tsx";
 import { DashboardLayout } from "./components/DashboardLayout";
 import AdminOverview from "./pages/admin/AdminOverview";
 import AdminSchools from "./pages/admin/AdminSchools";
@@ -58,7 +58,7 @@ const App = () => (
             
             <Route path="/admin" element={<DashboardLayout role="admin" />}>
               <Route index element={<AdminOverview />} />
-              <Route path="analytics" element={<AdminAnalytics />} />
+              {/*<Route path="analytics" element={<AdminAnalytics />} />*/}
               <Route path="schools" element={<AdminSchools />} />
               <Route path="schools/:id" element={<AdminSchoolDetail />} />
               <Route path="users" element={<AdminUsers />} />

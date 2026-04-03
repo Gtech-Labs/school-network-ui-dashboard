@@ -54,7 +54,7 @@ interface DashboardLayoutProps {
 const adminNavItems: NavItem[] = [
   // Main
   { labelKey: 'nav.overview', path: '/admin', icon: LayoutDashboard, section: 'main' },
-  { labelKey: 'nav.analytics', path: '/admin/analytics', icon: BarChart3, section: 'main' },
+  // { labelKey: 'nav.analytics', path: '/admin/analytics', icon: BarChart3, section: 'main' },
   
   // Management
   { labelKey: 'nav.schools', path: '/admin/schools', icon: School, section: 'management' },
