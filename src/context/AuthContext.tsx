@@ -38,6 +38,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             if (isExpired) {
                 logout();
             } else {
+
+                console.log("DECODED", decoded)
                 setUser(decoded);
             }
         } catch (error) {

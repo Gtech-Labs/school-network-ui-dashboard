@@ -42,6 +42,7 @@ export const PublicRoute = () => {
     // If user is already logged in, don't show the login page!
     // Redirect them based on their role (admin or school)
     if (isAuthenticated) {
+        console.log("From public route ++++++++++++++++++++++++", user);
         const defaultPath = user?.tenant_id === 'sn_network' ? '/admin' : '/school';
         return <Navigate to={defaultPath} replace />;
     }

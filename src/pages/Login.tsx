@@ -48,19 +48,19 @@ export default function Login() {
                 login(data.accessToken);
                 toast.success("Login successful");
                 const tenantId = data?.user?.tenant_id;
-                // check if the tenant ID exists in our DB
+                // check if the tenant ID exists in our DB - This check can be a function
 
                 const isExisting = (!isLoading && !isError && schools && schools.length > 0) && schools.some(school => school.tenant_id === tenantId);
-
                 localStorage.setItem('token', data.accessToken);
+                console.log("-------------------", typeof tenantId);
                 if(tenantId && tenantId === 'sn_network'){
                     console.log('Redirecting to admin dashboard');
-                    navigate('/admin');
-                }else if(isExisting){
-                    navigate('/school', {replace: true});
+                    return navigate('/admin', {replace: true});
+                }else if(isExisting && tenantId !== 'sn_school'){
+                    return navigate('/school', {replace: true});
                 }else{
                     // Redirect them to a page telling them that their school is not yet configured.
-                    navigate('/', {replace: true});
+                    return navigate('/', {replace: true});
                 }
             },
             onError: (error) => {
