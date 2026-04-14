@@ -27,7 +27,7 @@ import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, isWithinInter
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
-const ITEMS_PER_PAGE = 10;
+const ITEMS_PER_PAGE = 9;
 
 export default function AdminActivityLog() {
   const [currentPage, setCurrentPage] = useState(1);
