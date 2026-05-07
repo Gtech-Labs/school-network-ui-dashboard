@@ -1,139 +1,129 @@
-import { useState } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Clock, Edit, Trash2, X } from 'lucide-react';
-import { toast } from 'sonner';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { Plus, Clock, Trash2, Loader2, Check, ChevronsUpDown } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
+import { useAuth } from '@/context/AuthContext';
+import { useUserWithProfile } from '@/hooks/users/user.hook';
+import { useTimetables, useCreateTimetable, useDeleteTimetable } from '@/hooks/timetable.hook';
+import { useTeachers } from '@/hooks/users/teacher.hook';
+import { useSubjects } from '@/hooks/schools/subject.hook';
+import { DayOfWeek } from '@/api/timetable.api';
 
-const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
-const timeSlots = [
-  '08:00 - 09:00',
-  '09:00 - 10:00',
-  '10:00 - 11:00',
-  '11:00 - 12:00',
-  '12:00 - 13:00',
-  '13:00 - 14:00',
-  '14:00 - 15:00',
-];
-
-interface TimetableEntry {
-  id: string;
-  day: string;
-  time: string;
-  subject: string;
-  teacher: string;
-}
+const days = [DayOfWeek.MONDAY, DayOfWeek.TUESDAY, DayOfWeek.WEDNESDAY, DayOfWeek.THURSDAY, DayOfWeek.FRIDAY];
 
 export default function SchoolTimetable() {
-  const [classes, setClasses] = useState<string[]>(['Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5', 'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10']);
-  const [selectedClass, setSelectedClass] = useState('Class 1');
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const { data: userProfile } = useUserWithProfile(user?.sub || '');
+  const school = userProfile?.schoolAdminProfile?.school;
+  const schoolId = school?.id || '';
+  const gradesOffered = school?.gradesOffered || [];
+
+  const [selectedClass, setSelectedClass] = useState('');
+  useEffect(() => {
+    if (gradesOffered.length > 0 && !selectedClass) {
+      setSelectedClass(gradesOffered[0]);
+    }
+  }, [gradesOffered, selectedClass]);
+
   const [addDialogOpen, setAddDialogOpen] = useState(false);
-  const [addClassDialogOpen, setAddClassDialogOpen] = useState(false);
-  const [deleteClassDialogOpen, setDeleteClassDialogOpen] = useState(false);
-  const [classToDelete, setClassToDelete] = useState<string | null>(null);
-  const [timetable, setTimetable] = useState<Record<string, TimetableEntry[]>>({
-    'Class 1': [
-      { id: '1', day: 'Monday', time: '08:00 - 09:00', subject: 'Mathematics', teacher: 'Dr. Smith' },
-      { id: '2', day: 'Monday', time: '09:00 - 10:00', subject: 'English', teacher: 'Ms. Johnson' },
-      { id: '3', day: 'Tuesday', time: '08:00 - 09:00', subject: 'Science', teacher: 'Dr. Williams' },
-    ],
-  });
+  
+  // Combobox states
+  const [teacherOpen, setTeacherOpen] = useState(false);
+  const [subjectOpen, setSubjectOpen] = useState(false);
+
+  // Form states
+  const [day, setDay] = useState<DayOfWeek>(DayOfWeek.MONDAY);
+  const [startTime, setStartTime] = useState('08:00');
+  const [endTime, setEndTime] = useState('08:45');
+  const [subjectId, setSubjectId] = useState('');
+  const [teacherId, setTeacherId] = useState('');
+
+  const { toast } = useToast();
+
+  const { data: timetablesData, isLoading } = useTimetables(schoolId, selectedClass);
+  const timetables = timetablesData || [];
+  
+  const { mutate: createTimetable, isPending: isCreating } = useCreateTimetable();
+  const { mutate: deleteTimetable } = useDeleteTimetable();
+
+  const { data: teachersData } = useTeachers(schoolId);
+  const teachers = teachersData?.data || [];
+
+  const { data: subjectsData } = useSubjects(schoolId);
+  const subjects = subjectsData || [];
 
   const handleAddEntry = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const formData = new FormData(e.currentTarget);
-    const newEntry: TimetableEntry = {
-      id: Date.now().toString(),
-      day: formData.get('day') as string,
-      time: formData.get('time') as string,
-      subject: formData.get('subject') as string,
-      teacher: formData.get('teacher') as string,
-    };
-
-    setTimetable((prev) => ({
-      ...prev,
-      [selectedClass]: [...(prev[selectedClass] || []), newEntry],
-    }));
-
-    toast.success('Timetable entry added successfully');
-    setAddDialogOpen(false);
-  };
-
-  const handleDelete = (id: string) => {
-    setTimetable((prev) => ({
-      ...prev,
-      [selectedClass]: prev[selectedClass]?.filter((entry) => entry.id !== id) || [],
-    }));
-    toast.success('Entry removed');
-  };
-
-  const handleAddClass = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const formData = new FormData(e.currentTarget);
-    const className = formData.get('className') as string;
-
-    if (classes.includes(className)) {
-      toast.error('Class name already exists');
+    if (!subjectId || !teacherId) {
+      toast({ title: 'Error', description: 'Please select a subject and teacher', variant: 'destructive' });
       return;
     }
 
-    setClasses((prev) => [...prev, className]);
-    toast.success(`${className} added successfully`);
-    setAddClassDialogOpen(false);
-    e.currentTarget.reset();
+    createTimetable(
+      {
+        schoolId,
+        data: {
+          dayOfWeek: day,
+          startTime,
+          endTime,
+          groupLabel: selectedClass,
+          subjectId,
+          teacherId,
+        }
+      },
+      {
+        onSuccess: () => {
+          toast({ title: 'Success', description: 'Timetable entry added successfully' });
+          setAddDialogOpen(false);
+        },
+        onError: () => {
+          toast({ title: 'Error', description: 'Failed to add timetable entry', variant: 'destructive' });
+        }
+      }
+    );
   };
 
-  const handleDeleteClass = () => {
-    if (!classToDelete) return;
-
-    // Remove class from list
-    setClasses((prev) => prev.filter((cls) => cls !== classToDelete));
-
-    // Remove timetable data for this class
-    setTimetable((prev) => {
-      const newTimetable = { ...prev };
-      delete newTimetable[classToDelete];
-      return newTimetable;
+  const handleDelete = (id: string) => {
+    deleteTimetable(id, {
+      onSuccess: () => toast({ title: 'Success', description: 'Entry removed' }),
+      onError: () => toast({ title: 'Error', description: 'Failed to remove entry', variant: 'destructive' })
     });
-
-    // If the deleted class was selected, switch to the first available class
-    if (selectedClass === classToDelete && classes.length > 1) {
-      const remainingClasses = classes.filter((cls) => cls !== classToDelete);
-      setSelectedClass(remainingClasses[0]);
-    }
-
-    toast.success(`${classToDelete} deleted successfully`);
-    setDeleteClassDialogOpen(false);
-    setClassToDelete(null);
   };
 
-  const openDeleteDialog = (className: string) => {
-    setClassToDelete(className);
-    setDeleteClassDialogOpen(true);
-  };
-
-  const currentTimetable = timetable[selectedClass] || [];
+  const timeSlots = useMemo(() => {
+    const slots = new Set<string>();
+    timetables.forEach((t: any) => {
+      slots.add(`${t.startTime.slice(0, 5)} - ${t.endTime.slice(0, 5)}`);
+    });
+    return Array.from(slots).sort();
+  }, [timetables]);
 
   const getTimetableGrid = () => {
-    const grid: Record<string, Record<string, TimetableEntry | null>> = {};
-    
-    days.forEach(day => {
-      grid[day] = {};
+    const grid: Record<string, Record<string, any>> = {};
+    days.forEach(d => {
+      grid[d] = {};
       timeSlots.forEach(time => {
-        const entry = currentTimetable.find(e => e.day === day && e.time === time);
-        grid[day][time] = entry || null;
+        const [st, et] = time.split(' - ');
+        const entry = timetables.find((t: any) => t.dayOfWeek === d && t.startTime.slice(0, 5) === st && t.endTime.slice(0, 5) === et);
+        grid[d][time] = entry || null;
       });
     });
-    
     return grid;
   };
 
   const grid = getTimetableGrid();
+
+  if (!schoolId) return <div className="p-8 flex justify-center"><Loader2 className="animate-spin" /></div>;
 
   return (
     <div className="space-y-6">
@@ -142,193 +132,215 @@ export default function SchoolTimetable() {
           <h2 className="text-3xl font-bold">Class Timetable</h2>
           <p className="text-muted-foreground">Manage class schedules and periods</p>
         </div>
-        <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="mr-2 h-4 w-4" />
-              Add Period
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle>Add Timetable Entry</DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleAddEntry} className="space-y-4">
-              <div>
-                <Label htmlFor="day">Day</Label>
-                <Select name="day" required>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select day" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {days.map((day) => (
-                      <SelectItem key={day} value={day}>{day}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="time">Time Slot</Label>
-                <Select name="time" required>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select time" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {timeSlots.map((slot) => (
-                      <SelectItem key={slot} value={slot}>{slot}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="subject">Subject</Label>
-                <Input id="subject" name="subject" required />
-              </div>
-              <div>
-                <Label htmlFor="teacher">Teacher</Label>
-                <Input id="teacher" name="teacher" required />
-              </div>
-              <Button type="submit" className="w-full">Add Entry</Button>
-            </form>
-          </DialogContent>
-        </Dialog>
+        {selectedClass && (
+          <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="mr-2 h-4 w-4" />
+                Add Period
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Add Timetable Entry for {selectedClass}</DialogTitle>
+              </DialogHeader>
+              <form onSubmit={handleAddEntry} className="space-y-4">
+                <div>
+                  <Label htmlFor="day">Day</Label>
+                  <Select value={day} onValueChange={(val) => setDay(val as DayOfWeek)} required>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select day" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {days.map((d) => (
+                        <SelectItem key={d} value={d}>{d.charAt(0) + d.slice(1).toLowerCase()}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="startTime">Start Time</Label>
+                    <Input id="startTime" type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} required />
+                  </div>
+                  <div>
+                    <Label htmlFor="endTime">End Time</Label>
+                    <Input id="endTime" type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} required />
+                  </div>
+                </div>
+
+                <div className="flex flex-col space-y-2">
+                  <Label>Subject</Label>
+                  <Popover open={subjectOpen} onOpenChange={setSubjectOpen}>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" role="combobox" aria-expanded={subjectOpen} className="w-full justify-between">
+                        {subjectId ? subjects.find((s: any) => s.id === subjectId)?.name : "Select subject..."}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-full p-0">
+                      <Command>
+                        <CommandInput placeholder="Search subject..." />
+                        <CommandList>
+                          <CommandEmpty>No subject found.</CommandEmpty>
+                          <CommandGroup>
+                            {subjects.map((subject: any) => (
+                              <CommandItem
+                                key={subject.id}
+                                value={subject.name}
+                                onSelect={() => {
+                                  setSubjectId(subject.id);
+                                  setSubjectOpen(false);
+                                }}
+                              >
+                                <Check className={cn("mr-2 h-4 w-4", subjectId === subject.id ? "opacity-100" : "opacity-0")} />
+                                {subject.name} ({subject.code})
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                <div className="flex flex-col space-y-2">
+                  <Label>Teacher</Label>
+                  <Popover open={teacherOpen} onOpenChange={setTeacherOpen}>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" role="combobox" aria-expanded={teacherOpen} className="w-full justify-between">
+                        {teacherId ? teachers.find((t: any) => t.id === teacherId)?.fullName : "Select teacher..."}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-full p-0">
+                      <Command>
+                        <CommandInput placeholder="Search teacher..." />
+                        <CommandList>
+                          <CommandEmpty>No teacher found.</CommandEmpty>
+                          <CommandGroup>
+                            {teachers.map((teacher: any) => (
+                              <CommandItem
+                                key={teacher.id}
+                                value={teacher.fullName || ''}
+                                onSelect={() => {
+                                  setTeacherId(teacher.id);
+                                  setTeacherOpen(false);
+                                }}
+                              >
+                                <Check className={cn("mr-2 h-4 w-4", teacherId === teacher.id ? "opacity-100" : "opacity-0")} />
+                                {teacher.fullName}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                          <CommandGroup>
+                            <CommandItem onSelect={() => navigate('/dashboard/school/teachers')}>
+                              <Plus className="mr-2 h-4 w-4" /> Add Teacher
+                            </CommandItem>
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                <Button type="submit" className="w-full" disabled={isCreating}>
+                  {isCreating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Add Entry
+                </Button>
+              </form>
+            </DialogContent>
+          </Dialog>
+        )}
       </div>
 
-      {/* Class Selector */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>Select Class</CardTitle>
-            <Dialog open={addClassDialogOpen} onOpenChange={setAddClassDialogOpen}>
-              <DialogTrigger asChild>
-                <Button variant="outline" size="sm">
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add Class
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-md">
-                <DialogHeader>
-                  <DialogTitle>Add New Class</DialogTitle>
-                </DialogHeader>
-                <form onSubmit={handleAddClass} className="space-y-4">
-                  <div>
-                    <Label htmlFor="className">Class Name</Label>
-                    <Input 
-                      id="className" 
-                      name="className" 
-                      placeholder="e.g., Class 11 or Grade 10-A"
-                      required 
-                    />
-                  </div>
-                  <Button type="submit" className="w-full">Add Class</Button>
-                </form>
-              </DialogContent>
-            </Dialog>
-          </div>
+          <CardTitle>Select Class</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-wrap gap-2">
-            {classes.map((cls) => (
-              <div key={cls} className="relative group">
+          {gradesOffered.length === 0 ? (
+            <p className="text-muted-foreground text-sm">No classes configured for this school.</p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {gradesOffered.map((cls: string) => (
                 <Button
+                  key={cls}
                   variant={selectedClass === cls ? 'default' : 'outline'}
                   onClick={() => setSelectedClass(cls)}
-                  className="pr-8"
                 >
                   {cls}
                 </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="absolute -top-2 -right-2 h-6 w-6 rounded-full bg-destructive text-destructive-foreground opacity-0 group-hover:opacity-100 transition-opacity"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    openDeleteDialog(cls);
-                  }}
-                >
-                  <X className="h-3 w-3" />
-                </Button>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      {/* Delete Class Confirmation Dialog */}
-      <AlertDialog open={deleteClassDialogOpen} onOpenChange={setDeleteClassDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Class</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete "{classToDelete}"? This will permanently remove the class and all its timetable entries. This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setClassToDelete(null)}>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDeleteClass} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* Timetable Grid */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Clock className="h-5 w-5" />
-            Timetable for {selectedClass}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse">
-              <thead>
-                <tr>
-                  <th className="border p-3 bg-muted/50 text-left font-medium">Time</th>
-                  {days.map((day) => (
-                    <th key={day} className="border p-3 bg-muted/50 text-left font-medium">
-                      {day}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {timeSlots.map((time) => (
-                  <tr key={time}>
-                    <td className="border p-3 bg-muted/30 font-medium text-sm">
-                      {time}
-                    </td>
-                    {days.map((day) => {
-                      const entry = grid[day][time];
-                      return (
-                        <td key={`${day}-${time}`} className="border p-3">
-                          {entry ? (
-                            <div className="space-y-1">
-                              <div className="font-medium text-sm">{entry.subject}</div>
-                              <div className="text-xs text-muted-foreground">{entry.teacher}</div>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-6 w-6"
-                                onClick={() => handleDelete(entry.id)}
-                              >
-                                <Trash2 className="h-3 w-3 text-destructive" />
-                              </Button>
-                            </div>
-                          ) : (
-                            <div className="text-xs text-muted-foreground text-center">-</div>
-                          )}
+      {selectedClass && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Clock className="h-5 w-5" />
+              Timetable for {selectedClass}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <div className="flex justify-center p-8"><Loader2 className="animate-spin text-muted-foreground" /></div>
+            ) : timeSlots.length === 0 ? (
+              <div className="text-center p-8 text-muted-foreground">No timetable entries found for this class. Click "Add Period" to start building the schedule.</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse">
+                  <thead>
+                    <tr>
+                      <th className="border p-3 bg-muted/50 text-left font-medium">Time</th>
+                      {days.map((day) => (
+                        <th key={day} className="border p-3 bg-muted/50 text-left font-medium">
+                          {day.charAt(0) + day.slice(1).toLowerCase()}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {timeSlots.map((time) => (
+                      <tr key={time}>
+                        <td className="border p-3 bg-muted/30 font-medium text-sm whitespace-nowrap">
+                          {time}
                         </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
+                        {days.map((day) => {
+                          const entry = grid[day][time];
+                          return (
+                            <td key={`${day}-${time}`} className="border p-3 align-top min-w-[150px]">
+                              {entry ? (
+                                <div className="space-y-1 relative group">
+                                  <div className="font-medium text-sm">{entry.subject?.name}</div>
+                                  <div className="text-xs text-muted-foreground">{entry.teacher?.fullName}</div>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="absolute -top-2 -right-2 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity bg-background border"
+                                    onClick={() => handleDelete(entry.id)}
+                                  >
+                                    <Trash2 className="h-3 w-3 text-destructive" />
+                                  </Button>
+                                </div>
+                              ) : (
+                                <div className="text-xs text-muted-foreground text-center opacity-50">-</div>
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

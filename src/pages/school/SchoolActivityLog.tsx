@@ -22,15 +22,21 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Search, ChevronLeft, ChevronRight, Activity, Filter, Download, Calendar as CalendarIcon } from 'lucide-react';
-import { mockActivityLogs, ActivityLog } from '@/lib/mockData';
-import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
-import { toast } from 'sonner';
-import { cn } from '@/lib/utils';
 import { useTranslation } from 'react-i18next';
+import { useAuth } from '@/context/AuthContext';
+import { useUserWithProfile } from '@/hooks/users/user.hook';
+import { useActivityLogs } from '@/hooks/logs.hook';
+import { Loader2 } from 'lucide-react';
+import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from 'date-fns';
+import { cn } from '@/lib/utils';
 
 const ITEMS_PER_PAGE = 10;
 
 export default function SchoolActivityLog() {
+  const { user } = useAuth();
+  const { data: userProfile } = useUserWithProfile(user?.sub || '');
+  const schoolId = userProfile?.schoolAdminProfile?.school?.id || '';
+
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState('');
   const [dateFilter, setDateFilter] = useState<string>('all');
@@ -38,54 +44,35 @@ export default function SchoolActivityLog() {
   const [customDateTo, setCustomDateTo] = useState<Date | undefined>(undefined);
   const { t } = useTranslation();
 
-  // Filter logs for school-related actions only
-  const schoolLogs = mockActivityLogs.filter(
-    (log) => log.userRole === 'Admin' || log.userRole === 'Teacher' || log.userRole === 'Parent'
-  );
+  const getParams = () => {
+    const params: any = {
+      schoolId,
+      page: currentPage,
+      limit: ITEMS_PER_PAGE,
+      search: searchQuery || undefined,
+    };
 
-  // Apply date filters
-  const dateFilteredLogs = schoolLogs.filter((log) => {
-    const logDate = new Date(log.timestamp);
     const now = new Date();
-
-    switch (dateFilter) {
-      case 'week':
-        return isWithinInterval(logDate, {
-          start: startOfWeek(now, { weekStartsOn: 1 }),
-          end: endOfWeek(now, { weekStartsOn: 1 })
-        });
-      case 'month':
-        return isWithinInterval(logDate, {
-          start: startOfMonth(now),
-          end: endOfMonth(now)
-        });
-      case 'custom':
-        if (customDateFrom && customDateTo) {
-          return isWithinInterval(logDate, {
-            start: customDateFrom,
-            end: customDateTo
-          });
-        }
-        return true;
-      default:
-        return true;
+    if (dateFilter === 'week') {
+      params.startDate = startOfWeek(now, { weekStartsOn: 1 }).toISOString();
+      params.endDate = endOfWeek(now, { weekStartsOn: 1 }).toISOString();
+    } else if (dateFilter === 'month') {
+      params.startDate = startOfMonth(now).toISOString();
+      params.endDate = endOfMonth(now).toISOString();
+    } else if (dateFilter === 'custom' && customDateFrom && customDateTo) {
+      params.startDate = customDateFrom.toISOString();
+      params.endDate = customDateTo.toISOString();
     }
-  });
 
-  // Apply search filters
-  const filteredLogs = dateFilteredLogs.filter((log) => {
-    const matchesSearch =
-      log.action?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      log.details?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      log.user?.toLowerCase().includes(searchQuery.toLowerCase());
+    return params;
+  };
 
-    return matchesSearch;
-  });
-
-  const totalPages = Math.ceil(filteredLogs.length / ITEMS_PER_PAGE);
+  const { data: logsData, isLoading } = useActivityLogs(getParams());
+  const logs = logsData?.data || [];
+  const totalLogs = logsData?.total || 0;
+  const totalPages = logsData?.totalPages || 0;
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-  const endIndex = startIndex + ITEMS_PER_PAGE;
-  const currentLogs = filteredLogs.slice(startIndex, endIndex);
+  const endIndex = startIndex + logs.length;
 
   const handleDownload = () => {
     const headers = ['Timestamp', 'User', 'Role', 'Action', 'Details'];
@@ -114,6 +101,14 @@ export default function SchoolActivityLog() {
     
     toast.success(t('school.activity.downloadSuccess'));
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -258,15 +253,15 @@ export default function SchoolActivityLog() {
                   <TableHead className="whitespace-nowrap">{t('admin.activity.details')}</TableHead>
                 </TableRow>
               </TableHeader>
-              <TableBody>
-                {currentLogs.length > 0 ? (
-                  currentLogs.map((log) => (
+               <TableBody>
+                {logs.length > 0 ? (
+                  logs.map((log) => (
                     <TableRow key={log.id}>
                       <TableCell className="font-mono text-sm">
-                        <div className="truncate">{log.timestamp}</div>
+                        <div className="truncate">{format(new Date(log.timestamp), "yyyy-MM-dd HH:mm")}</div>
                       </TableCell>
                       <TableCell className="font-medium">
-                        <div className="truncate">{log.user}</div>
+                        <div className="truncate">{log.userName}</div>
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline" className="text-xs">{log.userRole}</Badge>
@@ -296,8 +291,8 @@ export default function SchoolActivityLog() {
           {totalPages > 1 && (
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 border-t">
               <p className="text-sm text-muted-foreground text-center sm:text-left">
-                {t('common.showing')} {startIndex + 1} {t('common.to')} {Math.min(endIndex, filteredLogs.length)} {t('common.of')}{' '}
-                {filteredLogs.length} {t('common.entries')}
+                {t('common.showing')} {startIndex + 1} {t('common.to')} {endIndex} {t('common.of')}{' '}
+                {totalLogs} {t('common.entries')}
               </p>
               <div className="flex items-center gap-2 flex-wrap justify-center">
                 <Button
