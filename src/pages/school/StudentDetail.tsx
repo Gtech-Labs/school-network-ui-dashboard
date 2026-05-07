@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { mockStudents } from '@/lib/mockData';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -18,17 +17,110 @@ import {
 } from '@/components/ui/alert-dialog';
 import StudentEditDialog, { StudentFormData } from '@/components/StudentEditDialog';
 import { toast } from 'sonner';
+import {useApiQuery} from "@/hooks/use-api-query.ts";
+import {useApiMutation} from "@/hooks/use-api-mutation.ts";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Loader2 } from "lucide-react";
+
 
 export default function StudentDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const student = mockStudents.find((s) => s.id === id);
+  const { mutate, isPending } = useApiMutation<never>();
+  const { data: studentResponse, isLoading, isError } = useApiQuery(
+      ['student'],
+      `/students/${id}`,
+      { enabled: !!id }
+  );
+  const student = studentResponse?.user;
+  console.log("student", id)
+
+  const deleteStudent = async () => {
+    mutate(
+        {
+          method: 'DELETE',
+          endpoint: `students/${student.id}`,
+          data: undefined
+        },
+        {
+          onSuccess: () => {
+            // Replace it with your preferred toast implementation
+            console.log("Student deleted successfully");
+            toast.success("Student deleted successfully");
+            setDeleteDialogOpen(false);
+            navigate('/school/students');
+          },
+          onError: (err) => {
+            toast.error("Failed to delete student");
+            console.error("Delete failed", err);
+            setDeleteDialogOpen(false);
+          }
+        }
+    )
+  }
 
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [suspendDialogOpen, setSuspendDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
-  if (!student) {
+  const suspendStudent = async () => {
+    mutate(
+        {
+          method: 'PATCH',
+          endpoint: `students/${student.id}`,
+          data: { status: 'Suspended' }
+        },
+        {
+          onSuccess: () => {
+            toast.success("Student suspended successfully");
+            setSuspendDialogOpen(false);
+            // Quick reload to show updated status
+            window.location.reload();
+          },
+          onError: (err) => {
+            toast.error("Failed to suspend student");
+            console.error("Suspend failed", err);
+            setSuspendDialogOpen(false);
+          }
+        }
+    )
+  }
+
+  if (isLoading) {
+    return (
+        <div className="space-y-6 animate-fade-in">
+          <div className="flex items-center justify-between">
+            <Skeleton className="h-10 w-32" />
+            <div className="flex gap-2">
+              <Skeleton className="h-10 w-24" />
+              <Skeleton className="h-10 w-24" />
+              <Skeleton className="h-10 w-24" />
+            </div>
+          </div>
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center space-x-4">
+                <Skeleton className="h-20 w-20 rounded-full" />
+                <div className="space-y-2">
+                  <Skeleton className="h-6 w-48" />
+                  <Skeleton className="h-4 w-32" />
+                </div>
+              </div>
+              <div className="mt-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {[...Array(6)].map((_, i) => (
+                    <div key={i} className="space-y-2">
+                      <Skeleton className="h-4 w-24" />
+                      <Skeleton className="h-6 w-full" />
+                    </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+    );
+  }
+
+  if (!student && !isLoading) {
     return (
       <div className="space-y-6 animate-fade-in">
         <div className="flex items-center justify-between">
@@ -46,6 +138,7 @@ export default function StudentDetail() {
     );
   }
 
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
@@ -56,11 +149,11 @@ export default function StudentDetail() {
             Back
           </Button>
           <div>
-            <h2 className="text-3xl font-bold tracking-tight">{student.name}</h2>
-            <p className="text-muted-foreground">{student.class}</p>
+            <h2 className="text-3xl font-bold tracking-tight">{student?.fullName || student?.name}</h2>
+            <p className="text-muted-foreground">{student?.grade}</p>
           </div>
-          <Badge variant={student.status === 'Active' ? 'default' : 'secondary'} className="rounded-lg">
-            {student.status}
+          <Badge variant={student?.status === 'Active' ? 'default': 'secondary' } className="rounded-lg">
+            {student?.status || 'Active'}
           </Badge>
         </div>
         <div className="flex gap-2">
@@ -84,10 +177,6 @@ export default function StudentDetail() {
         open={editDialogOpen}
         onOpenChange={setEditDialogOpen}
         student={student}
-        onSave={(data: StudentFormData) => {
-          console.log('Saving student data:', data);
-          toast.success('Student information updated successfully');
-        }}
       />
 
       {/* Suspend Confirmation Dialog */}
@@ -102,13 +191,18 @@ export default function StudentDetail() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => {
-                toast.success(`${student.name} has been suspended`);
-                setSuspendDialogOpen(false);
-              }}
+              onClick={suspendStudent}
               className="bg-orange-600 hover:bg-orange-700"
+              disabled={isPending}
             >
-              Suspend Student
+              {isPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Suspending...
+                  </>
+              ) : (
+                  'Suspend Student'
+              )}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -120,20 +214,24 @@ export default function StudentDetail() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Student</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to permanently delete {student.name}? This action cannot be undone. All associated records, documents, and data will be permanently removed.
+              Are you sure you want to permanently delete {student?.middleNames}? This action cannot be undone. All associated records, documents, and data will be permanently removed.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => {
-                toast.success(`${student.name} has been deleted`);
-                setDeleteDialogOpen(false);
-                navigate('/school/students');
-              }}
+              onClick={deleteStudent}
               className="bg-destructive hover:bg-destructive/90"
+              disabled={isPending}
             >
-              Delete Permanently
+              {isPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Deleting...
+                  </>
+              ) : (
+                  'Delete Permanently'
+              )}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -163,55 +261,55 @@ export default function StudentDetail() {
                 <div className="grid grid-cols-1 md:grid-cols-2">
                   <div className="p-4 border-b md:border-r">
                     <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">First Name</label>
-                    <p className="text-base font-medium mt-1">{student.name.split(' ')[0]}</p>
+                    <p className="text-base font-medium mt-1">{student?.fullName?.split(' ')[0] || student?.middleNames?.split(' ')[0] || student?.name }</p>
                   </div>
                   <div className="p-4 border-b">
                     <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Surname</label>
-                    <p className="text-base font-medium mt-1">{student.name.split(' ').slice(1).join(' ')}</p>
+                    <p className="text-base font-medium mt-1">{student?.fullName?.split(' ')?.slice(1).join(' ') || student?.middleNames?.split(' ').slice(1).join(' ') || student?.surname}</p>
                   </div>
                   <div className="p-4 border-b md:border-r">
                     <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Middle Name(s)</label>
-                    <p className="text-base mt-1 text-muted-foreground italic">Not provided</p>
+                    <p className="text-base mt-1 text-muted-foreground italic">{student?.middleNames || 'Not provided'}</p>
                   </div>
                   <div className="p-4 border-b">
                     <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Preferred Name</label>
-                    <p className="text-base mt-1 text-muted-foreground italic">Not provided</p>
+                    <p className="text-base mt-1 text-muted-foreground italic">{student?.preferredName || 'Not provided'}</p>
                   </div>
                   <div className="p-4 border-b md:border-r">
                     <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Gender</label>
-                    <p className="text-base mt-1 text-muted-foreground italic">Not provided</p>
+                    <p className="text-base mt-1 text-muted-foreground italic">{student?.gender || 'Not provided'}</p>
                   </div>
                   <div className="p-4 border-b">
                     <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Date of Birth</label>
-                    <p className="text-base mt-1 text-muted-foreground italic">Not provided</p>
+                    <p className="text-base mt-1 text-muted-foreground italic">{student?.dateOfBirth || 'Not provided'}</p>
                   </div>
                   <div className="p-4 border-b md:border-r">
                     <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">ID Number / Birth Certificate</label>
-                    <p className="text-base mt-1 text-muted-foreground italic">Not provided</p>
+                    <p className="text-base mt-1 text-muted-foreground italic">{student?.idNumber || 'Not provided'}</p>
                   </div>
                   <div className="p-4 border-b">
                     <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Citizenship</label>
-                    <p className="text-base mt-1 text-muted-foreground italic">Not provided</p>
+                    <p className="text-base mt-1 text-muted-foreground italic">{student?.citizenship || 'Not provided'}</p>
                   </div>
                   <div className="p-4 border-b md:border-r">
                     <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Nationality</label>
-                    <p className="text-base mt-1 text-muted-foreground italic">Not provided</p>
+                    <p className="text-base mt-1 text-muted-foreground italic">{student?.nationality || 'Not provided'}</p>
                   </div>
                   <div className="p-4 border-b">
                     <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Home Language</label>
-                    <p className="text-base mt-1 text-muted-foreground italic">Not provided</p>
+                    <p className="text-base mt-1 text-muted-foreground italic">{student?.homeLanguage || 'Not provided'}</p>
                   </div>
                   <div className="p-4 border-b md:border-r">
                     <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Religion</label>
-                    <p className="text-base mt-1 text-muted-foreground italic">Not provided</p>
+                    <p className="text-base mt-1 text-muted-foreground italic">{student?.religion || 'Not provided'}</p>
                   </div>
                   <div className="p-4 border-b">
                     <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Population Group</label>
-                    <p className="text-base mt-1 text-muted-foreground italic">Not provided</p>
+                    <p className="text-base mt-1 text-muted-foreground italic">{student?.populationGroup || 'Not provided'}</p>
                   </div>
                   <div className="p-4 md:border-r">
                     <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Disability Status</label>
-                    <p className="text-base mt-1 text-muted-foreground italic">Not provided</p>
+                    <p className="text-base mt-1 text-muted-foreground italic">{student?.disabilityStatus || 'Not provided'}</p>
                   </div>
                 </div>
               </div>
@@ -235,19 +333,19 @@ export default function StudentDetail() {
                   <div className="grid grid-cols-1 md:grid-cols-2">
                     <div className="md:col-span-2 p-4 border-b">
                       <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Home Address</label>
-                      <p className="text-base mt-1 text-muted-foreground italic">Not provided</p>
+                      <p className="text-base mt-1 text-muted-foreground italic">{student?.homeAddress || 'Not provided'}</p>
                     </div>
                     <div className="p-4 border-b md:border-r">
                       <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Living Arrangement</label>
-                      <p className="text-base mt-1 text-muted-foreground italic">Not provided</p>
+                      <p className="text-base mt-1 text-muted-foreground italic">{student?.livingArrangement}</p>
                     </div>
                     <div className="p-4 border-b">
                       <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Home Phone</label>
-                      <p className="text-base mt-1 text-muted-foreground italic">Not provided</p>
+                      <p className="text-base mt-1 text-muted-foreground italic">{student?.homePhone}</p>
                     </div>
                     <div className="p-4 md:border-r">
                       <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Student Mobile</label>
-                      <p className="text-base mt-1 text-muted-foreground italic">Not provided</p>
+                      <p className="text-base mt-1 text-muted-foreground italic">{student?.phone}</p>
                     </div>
                     <div className="p-4">
                       <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Email</label>
@@ -264,43 +362,53 @@ export default function StudentDetail() {
                   <div className="grid grid-cols-1 md:grid-cols-2">
                     <div className="p-4 border-b md:border-r">
                       <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Full Name</label>
-                      <p className="text-base font-medium mt-1">{student.parentName}</p>
+                      <p className="text-base font-medium mt-1">
+                        {student.parentProfile?.fullName || student.parentName || 'Not provided'}
+                      </p>
                     </div>
                     <div className="p-4 border-b">
                       <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Relationship</label>
-                      <p className="text-base mt-1 text-muted-foreground italic">Not provided</p>
+                      <p className="text-base mt-1 font-medium">
+                        {student.parentProfile?.relationship || 'Not provided'}
+                      </p>
                     </div>
                     <div className="p-4 border-b md:border-r">
                       <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">ID Number / Passport</label>
-                      <p className="text-base mt-1 text-muted-foreground italic">Not provided</p>
+                      <p className="text-base mt-1 font-medium">
+                        {student.parentProfile?.idNumber || 'Not provided'}
+                      </p>
                     </div>
                     <div className="p-4 border-b">
                       <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Primary Phone</label>
-                      <p className="text-base font-medium mt-1">{student.parentPhone}</p>
+                      <p className="text-base font-medium mt-1">
+                        {student.parentProfile?.phone || student.parentPhone || 'Not provided'}
+                      </p>
                     </div>
                     <div className="p-4 border-b md:border-r">
-                      <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Secondary Phone</label>
-                      <p className="text-base mt-1 text-muted-foreground italic">Not provided</p>
+                      <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Occupation</label>
+                      <p className="text-base mt-1 font-medium">
+                        {student.parentProfile?.occupation || 'Not provided'}
+                      </p>
                     </div>
                     <div className="p-4 border-b">
                       <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Email Address</label>
-                      <p className="text-base font-medium mt-1">{student.parentEmail}</p>
-                    </div>
-                    <div className="p-4 border-b md:border-r">
-                      <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Employment Status</label>
-                      <p className="text-base mt-1 text-muted-foreground italic">Not provided</p>
-                    </div>
-                    <div className="p-4 border-b">
-                      <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Employer Name</label>
-                      <p className="text-base mt-1 text-muted-foreground italic">Not provided</p>
+                      <p className="text-base font-medium mt-1">
+                        {student.parentProfile?.email || student.parentEmail || 'Not provided'}
+                      </p>
                     </div>
                     <div className="p-4 md:border-r">
-                      <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Occupation</label>
-                      <p className="text-base mt-1 text-muted-foreground italic">Not provided</p>
+                      <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Address</label>
+                      <p className="text-base mt-1 font-medium">
+                        {student.parentProfile?.address || 'Not provided'}
+                      </p>
                     </div>
                     <div className="p-4">
-                      <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Responsible for Fees</label>
-                      <p className="text-base mt-1 text-muted-foreground italic">Not provided</p>
+                      <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Account Status</label>
+                      <p className="text-base mt-1">
+                        <Badge variant={student.parentProfile?.accountStatus === 'Active' ? 'default' : 'secondary'}>
+                          {student.parentProfile?.accountStatus || 'N/A'}
+                        </Badge>
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -366,11 +474,11 @@ export default function StudentDetail() {
                   <div className="grid grid-cols-1 md:grid-cols-2">
                     <div className="p-4 border-b md:border-r">
                       <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Current Grade</label>
-                      <p className="text-base font-medium mt-1">{student.class}</p>
+                      <p className="text-base font-medium mt-1">{student?.grade}</p>
                     </div>
                     <div className="p-4 border-b">
                       <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Class/Section</label>
-                      <p className="text-base font-medium mt-1">{student.class}</p>
+                      <p className="text-base font-medium mt-1">{student?.grade}</p>
                     </div>
                     <div className="p-4 border-b md:border-r">
                       <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Admission Year</label>

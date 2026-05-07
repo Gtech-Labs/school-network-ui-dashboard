@@ -34,9 +34,13 @@ import {
   Users,
   GraduationCap,
 } from 'lucide-react';
-import { mockParents, mockStudents, Parent } from '@/lib/mockData';
+import { Parent } from '@/pages/interfaces/parent.interface';
 import { useToast } from '@/hooks/use-toast';
 import { ParentEditDialog } from '@/components/ParentEditDialog';
+import { useParentDetail, useUpdateParent, useDeleteParent } from '@/hooks/users/parent.hook';
+import { Skeleton } from '@/components/ui/skeleton';
+import { toast as sonnerToast } from 'sonner';
+
 
 export default function ParentDetail() {
   const { id } = useParams();
@@ -47,7 +51,31 @@ export default function ParentDetail() {
   const [suspendDialogOpen, setSuspendDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
-  const parent = mockParents.find((p) => p.id === id);
+  const { data: parentData, isLoading } = useParentDetail(id || '');
+  const { mutateAsync: updateParent } = useUpdateParent(id || '');
+  const { mutateAsync: deleteParent } = useDeleteParent();
+
+  const parent = parentData?.user;
+
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <Skeleton className="h-10 w-48" />
+          <div className="flex gap-2">
+            <Skeleton className="h-10 w-24" />
+            <Skeleton className="h-10 w-24" />
+          </div>
+        </div>
+        <div className="grid gap-6 md:grid-cols-2">
+          <Skeleton className="h-[200px] w-full" />
+          <Skeleton className="h-[200px] w-full" />
+        </div>
+        <Skeleton className="h-[300px] w-full" />
+      </div>
+    );
+  }
 
   if (!parent) {
     return (
@@ -62,40 +90,37 @@ export default function ParentDetail() {
     );
   }
 
-  // Get linked students data
-  const linkedStudents = parent.children.map((child) => {
-    const student = mockStudents.find((s) => s.id === child.studentId);
-    return {
-      ...child,
-      email: student?.email,
-      feesPaid: student?.feesPaid,
-      status: student?.status,
-    };
-  });
 
-  const handleSaveEdit = (data: Partial<Parent>) => {
-    toast({
-      title: 'Parent Updated',
-      description: `${data.fullName}'s information has been updated successfully.`,
-    });
+  // Get linked students data
+  const linkedStudents = parent.students || [];
+
+
+  const handleSaveEdit = () => {
+    setEditDialogOpen(false);
   };
 
-  const handleSuspend = () => {
-    toast({
-      title: 'Parent Account Suspended',
-      description: `${parent.fullName}'s account has been suspended.`,
-    });
+
+  const handleSuspend = async () => {
+    try {
+      await updateParent({ status: parent.status === 'Active' ? 'Suspended' : 'Active' });
+      sonnerToast.success(`Parent ${parent.status === 'Active' ? 'Suspended' : 'Reactivated'}`);
+    } catch (error) {
+      sonnerToast.error("Failed to update status");
+    }
     setSuspendDialogOpen(false);
   };
 
-  const handleDelete = () => {
-    toast({
-      title: 'Parent Deleted',
-      description: `${parent.fullName} has been removed from the system.`,
-    });
+  const handleDelete = async () => {
+    try {
+      await deleteParent(parent.id);
+      sonnerToast.success("Parent profile deleted");
+      navigate('/school/parents');
+    } catch (error) {
+      sonnerToast.error("Failed to delete parent");
+    }
     setDeleteDialogOpen(false);
-    navigate('/school/parents');
   };
+
 
   return (
     <div className="space-y-6">
@@ -249,8 +274,9 @@ export default function ParentDetail() {
                     <TableCell className="font-medium">
                       <div className="flex items-center gap-2">
                         <GraduationCap className="h-4 w-4 text-muted-foreground" />
-                        {child.studentName}
+                        {child.fullName}
                       </div>
+
                     </TableCell>
                     <TableCell>{child.grade}</TableCell>
                     <TableCell>{child.class}</TableCell>
@@ -261,9 +287,10 @@ export default function ParentDetail() {
                     </TableCell>
                     <TableCell className="text-right">
                       <Button variant="outline" size="sm" asChild>
-                        <Link to={`/school/students/${child.studentId}`}>
+                        <Link to={`/school/students/${child.id}`}>
                           View Details
                         </Link>
+
                       </Button>
                     </TableCell>
                   </TableRow>

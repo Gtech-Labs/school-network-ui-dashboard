@@ -7,116 +7,19 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ChevronLeft, ChevronRight, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import {useApiMutation} from "@/hooks/use-api-mutation.ts";
+import {toast} from "sonner";
+import { Loader2 } from "lucide-react";
 
-interface Student {
-  id: string;
-  name: string;
-  email: string;
-  class: string;
-  parentName: string;
-  parentPhone: string;
-  parentEmail: string;
-  feesPaid: number;
-  status: string;
-}
+import { StudentInterface} from '../pages/interfaces/student.interface.ts'
 
 interface StudentEditDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  student: Student;
-  onSave: (data: StudentFormData) => void;
+  student: StudentInterface;
 }
 
-export interface StudentFormData {
-  // Identity
-  firstName: string;
-  surname: string;
-  middleName: string;
-  preferredName: string;
-  gender: string;
-  dateOfBirth: string;
-  idNumber: string;
-  citizenship: string;
-  nationality: string;
-  homeLanguage: string;
-  religion: string;
-  populationGroup: string;
-  disabilityStatus: string;
-  // Guardianship
-  homeAddress: string;
-  livingArrangement: string;
-  homePhone: string;
-  studentMobile: string;
-  studentEmail: string;
-  parent1Name: string;
-  parent1Relationship: string;
-  parent1IdNumber: string;
-  parent1PrimaryPhone: string;
-  parent1SecondaryPhone: string;
-  parent1Email: string;
-  parent1EmploymentStatus: string;
-  parent1Employer: string;
-  parent1Occupation: string;
-  parent1ResponsibleForFees: string;
-  emergencyContactName: string;
-  emergencyContactRelationship: string;
-  emergencyContactPhone: string;
-  emergencyContactAltPhone: string;
-  emergencyContactAddress: string;
-  emergencyContactPickupPermission: string;
-  // Academics
-  currentGrade: string;
-  classSection: string;
-  admissionYear: string;
-  previousSchoolName: string;
-  previousSchoolEmis: string;
-  reasonForTransfer: string;
-  academicHistory: string;
-  promotionStatus: string;
-  registeredSubjects: string;
-  subjectChoices: string;
-  curriculumType: string;
-  // Wellness
-  medicalAidName: string;
-  medicalAidNumber: string;
-  mainMemberName: string;
-  medicalConditions: string;
-  allergies: string;
-  regularMedication: string;
-  doctorName: string;
-  doctorPhone: string;
-  emergencyTreatmentConsent: string;
-  learningBarriers: string;
-  physicalDisabilities: string;
-  supportServicesNeeded: string;
-  concessionRequirements: string;
-  individualSupportPlan: string;
-  // Conduct
-  behaviourNotes: string;
-  incidentReports: string;
-  meritDemeritRecords: string;
-  suspensionHistory: string;
-  dailyAttendance: string;
-  absenceReasons: string;
-  lateArrivals: string;
-  absenceAlerts: string;
-  // Finance
-  feeCategory: string;
-  billingGuardian: string;
-  paymentStatus: string;
-  outstandingBalance: string;
-  discounts: string;
-  paymentPlan: string;
-  // Portfolio
-  transportMode: string;
-  pickupPoint: string;
-  busRoute: string;
-  transportProvider: string;
-  extracurricularActivities: string;
-  sportsTeams: string;
-  clubsMembership: string;
-  achievementsAwards: string;
-}
+
 
 const STEPS = [
   { id: 'identity', label: 'Identity' },
@@ -128,94 +31,103 @@ const STEPS = [
   { id: 'portfolio', label: 'Portfolio' },
 ];
 
-export default function StudentEditDialog({ open, onOpenChange, student, onSave }: StudentEditDialogProps) {
+export default function StudentEditDialog({ open, onOpenChange, student }: StudentEditDialogProps) {
   const [currentStep, setCurrentStep] = useState(0);
-  const [formData, setFormData] = useState<StudentFormData>({
-    // Pre-populate with existing data
-    firstName: student.name.split(' ')[0] || '',
-    surname: student.name.split(' ').slice(1).join(' ') || '',
-    middleName: '',
-    preferredName: '',
-    gender: '',
-    dateOfBirth: '',
-    idNumber: '',
-    citizenship: '',
-    nationality: '',
-    homeLanguage: '',
-    religion: '',
-    populationGroup: '',
-    disabilityStatus: '',
-    homeAddress: '',
-    livingArrangement: '',
-    homePhone: '',
-    studentMobile: '',
-    studentEmail: student.email || '',
-    parent1Name: student.parentName || '',
-    parent1Relationship: '',
-    parent1IdNumber: '',
-    parent1PrimaryPhone: student.parentPhone || '',
-    parent1SecondaryPhone: '',
-    parent1Email: student.parentEmail || '',
-    parent1EmploymentStatus: '',
-    parent1Employer: '',
-    parent1Occupation: '',
-    parent1ResponsibleForFees: '',
-    emergencyContactName: '',
-    emergencyContactRelationship: '',
-    emergencyContactPhone: '',
-    emergencyContactAltPhone: '',
-    emergencyContactAddress: '',
-    emergencyContactPickupPermission: '',
-    currentGrade: student.class || '',
-    classSection: student.class || '',
-    admissionYear: '',
-    previousSchoolName: '',
-    previousSchoolEmis: '',
-    reasonForTransfer: '',
-    academicHistory: '',
-    promotionStatus: '',
-    registeredSubjects: '',
-    subjectChoices: '',
-    curriculumType: '',
-    medicalAidName: '',
-    medicalAidNumber: '',
-    mainMemberName: '',
-    medicalConditions: '',
-    allergies: '',
-    regularMedication: '',
-    doctorName: '',
-    doctorPhone: '',
-    emergencyTreatmentConsent: '',
-    learningBarriers: '',
-    physicalDisabilities: '',
-    supportServicesNeeded: '',
-    concessionRequirements: '',
-    individualSupportPlan: '',
-    behaviourNotes: '',
-    incidentReports: '',
-    meritDemeritRecords: '',
-    suspensionHistory: '',
-    dailyAttendance: '',
-    absenceReasons: '',
-    lateArrivals: '',
-    absenceAlerts: '',
-    feeCategory: '',
-    billingGuardian: student.parentName || '',
-    paymentStatus: `${student.feesPaid}%`,
-    outstandingBalance: '',
-    discounts: '',
-    paymentPlan: '',
-    transportMode: '',
-    pickupPoint: '',
-    busRoute: '',
-    transportProvider: '',
-    extracurricularActivities: '',
-    sportsTeams: '',
-    clubsMembership: '',
-    achievementsAwards: '',
-  });
+  const [formData, setFormData] = useState<StudentInterface>({
+    // --- IDENTITY ---
+    middleNames: student?.middleNames || '',
+    fullName: student?.fullName || '',
+    preferredName: student?.preferredName || '',
+    gender: student?.gender || '',
+    dateOfBirth: student?.dateOfBirth || '',
+    idNumber: student?.idNumber || '',
+    nationality: student?.nationality || '',
+    citizenship: student?.citizenship || '',
+    homeLanguage: student?.homeLanguage || '',
+    religion: student?.religion || '',
+    populationGroup: student?.populationGroup || '',
+    disabilityStatus: student?.disabilityStatus || '',
+    phone: student?.phone || '',
+    email: student?.email || '',
 
-  const handleInputChange = (field: keyof StudentFormData, value: string) => {
+    // --- ACADEMICS ---
+    grade: student?.grade || '',
+    classSection: student?.classSection || '',
+    admissionYear: student?.admissionYear || '',
+    previousSchoolName: student?.previousSchoolName || '',
+    previousSchoolEmis: student?.previousSchoolEmis || '',
+    reasonForTransfer: student?.reasonForTransfer || '',
+    academicHistory: student?.academicHistory || '',
+    promotionStatus: student?.promotionStatus || '',
+    registeredSubjects: student?.registeredSubjects || [],
+
+    // --- GUARDIANSHIP ---
+    homeAddress: student?.homeAddress || '',
+    livingArrangement: student?.livingArrangement || '',
+    homePhone: student?.homePhone || '',
+    studentMobile: student?.studentMobile || '',
+
+    // --- EMERGENCY CONTACT (JSONB) ---
+    emergencyContact: {
+      fullName: student?.emergencyContact?.fullName || '',
+      relationship: student?.emergencyContact?.relationship || '',
+      phone: student?.emergencyContact?.phone || '',
+      altPhone: student?.emergencyContact?.altPhone || '',
+      address: student?.emergencyContact?.address || '',
+      permissionToPickUp:
+          student?.emergencyContact?.permissionToPickUp || false,
+    },
+
+    // --- MEDICAL ---
+    medicalAidName: student?.medicalAidName || '',
+    medicalAidNumber: student?.medicalAidNumber || '',
+    medicalAidMainMember: student?.medicalAidMainMember || '',
+    medicalConditions: student?.medicalConditions || '',
+    allergies: student?.allergies || '',
+    regularMedication: student?.regularMedication || '',
+    doctorName: student?.doctorName || '',
+    doctorPhone: student?.doctorPhone || '',
+    emergencyTreatmentConsent: student?.emergencyTreatmentConsent || false,
+
+    // --- SPECIAL NEEDS (JSONB) ---
+    specialNeeds: {
+      learningBarriers: student?.specialNeeds?.learningBarriers || '',
+      physicalDisabilities: student?.specialNeeds?.physicalDisabilities || '',
+      supportServices: student?.specialNeeds?.supportServices || '',
+      concessionRequirements:
+          student?.specialNeeds?.concessionRequirements || '',
+    },
+
+    // --- TRANSPORT (JSONB) ---
+    transport: {
+      mode: student?.transport?.mode || '',
+      provider: student?.transport?.provider || '',
+      vehicleDetails: student?.transport?.vehicleDetails || '',
+      pickupLocation: student?.transport?.pickupLocation || '',
+      afterSchoolArrangement:
+          student?.transport?.afterSchoolArrangement || '',
+    },
+
+    // --- FINANCE ---
+    feeCategory: student?.feeCategory || '',
+    billingGuardian: student?.billingGuardian || '',
+    paymentStatus: student?.paymentStatus || '',
+    outstandingBalance: student?.outstandingBalance || '',
+
+    // --- DOCUMENT FLAGS (JSONB) ---
+    documents: {
+      birthCertificate: student?.documents?.birthCertificate || false,
+      idPassport: student?.documents?.idPassport || false,
+      immunizationCard: student?.documents?.immunizationCard || false,
+      previousSchoolReport:
+          student?.documents?.previousSchoolReport || false,
+      proofOfAddress: student?.documents?.proofOfAddress || false,
+      medicalAidCard: student?.documents?.medicalAidCard || false,
+    },
+  });
+  const { mutate, isPending } = useApiMutation<never>();
+
+  const handleInputChange = (field: any, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
@@ -232,7 +144,105 @@ export default function StudentEditDialog({ open, onOpenChange, student, onSave 
   };
 
   const handleSave = () => {
-    onSave(formData);
+    const payload = {
+      // Identity
+      middleNames: (formData as any).middleName || formData.middleNames,
+      fullName: formData.fullName,
+      preferredName: formData.preferredName,
+      gender: formData.gender,
+      dateOfBirth: formData.dateOfBirth,
+      idNumber: formData.idNumber,
+      nationality: formData.nationality,
+      citizenship: formData.citizenship,
+      homeLanguage: formData.homeLanguage,
+      religion: formData.religion,
+      populationGroup: formData.populationGroup,
+      disabilityStatus: formData.disabilityStatus,
+      phone: formData.phone,
+      email: (formData as any).studentEmail || formData.email,
+
+      // Academics
+      grade: (formData as any).currentGrade || formData.grade,
+      classSection: formData.classSection,
+      admissionYear: formData.admissionYear,
+      previousSchoolName: formData.previousSchoolName,
+      previousSchoolEmis: formData.previousSchoolEmis,
+      reasonForTransfer: formData.reasonForTransfer,
+      academicHistory: formData.academicHistory,
+      promotionStatus: formData.promotionStatus,
+      registeredSubjects: typeof formData.registeredSubjects === 'string' ? (formData.registeredSubjects as string).split(',').map(s => s.trim()) : formData.registeredSubjects,
+
+      // Guardianship
+      homeAddress: formData.homeAddress,
+      livingArrangement: formData.livingArrangement,
+      homePhone: formData.homePhone,
+      studentMobile: formData.studentMobile,
+
+      // Emergency Contact
+      emergencyContact: {
+        fullName: (formData as any).emergencyContactName || formData.emergencyContact?.fullName,
+        relationship: (formData as any).emergencyContactRelationship || formData.emergencyContact?.relationship,
+        phone: (formData as any).emergencyContactPhone || formData.emergencyContact?.phone,
+        altPhone: (formData as any).emergencyContactAltPhone || formData.emergencyContact?.altPhone,
+        address: formData.emergencyContact?.address,
+        permissionToPickUp: formData.emergencyContact?.permissionToPickUp,
+      },
+
+      // Wellness
+      medicalAidName: formData.medicalAidName,
+      medicalAidNumber: formData.medicalAidNumber,
+      medicalAidMainMember: (formData as any).mainMemberName || formData.medicalAidMainMember,
+      medicalConditions: formData.medicalConditions,
+      allergies: formData.allergies,
+      regularMedication: formData.regularMedication,
+      doctorName: formData.doctorName,
+      doctorPhone: formData.doctorPhone,
+      emergencyTreatmentConsent: formData.emergencyTreatmentConsent === 'yes' || formData.emergencyTreatmentConsent === true,
+
+      // Special Needs
+      specialNeeds: {
+        learningBarriers: (formData as any).learningBarriers || formData.specialNeeds?.learningBarriers,
+        physicalDisabilities: (formData as any).physicalDisabilities || formData.specialNeeds?.physicalDisabilities,
+        supportServices: (formData as any).supportServicesNeeded || formData.specialNeeds?.supportServices,
+        concessionRequirements: (formData as any).concessionRequirements || formData.specialNeeds?.concessionRequirements,
+      },
+
+      // Finance
+      feeCategory: formData.feeCategory,
+      billingGuardian: formData.billingGuardian,
+      paymentStatus: formData.paymentStatus,
+      outstandingBalance: formData.outstandingBalance,
+
+      // Transport
+      transport: {
+        mode: (formData as any).transportMode || formData.transport?.mode,
+        provider: (formData as any).transportProvider || formData.transport?.provider,
+        vehicleDetails: formData.transport?.vehicleDetails,
+        pickupLocation: (formData as any).pickupPoint || formData.transport?.pickupLocation,
+        afterSchoolArrangement: (formData as any).busRoute || formData.transport?.afterSchoolArrangement,
+      }
+    };
+
+    mutate(
+        {
+          method: 'PATCH',
+          endpoint: `students/${student.id}`,
+          data: payload
+        },
+        {
+          onSuccess: () => {
+            // Replace it with your preferred toast implementation
+            console.log("Student updated successfully");
+            toast.success("Student updated successfully");
+            onOpenChange(false);
+            window.location.reload();
+          },
+          onError: (err) => {
+            toast.error("Failed to update student");
+            console.error("Update failed", err);
+          }
+        }
+    );
     onOpenChange(false);
   };
 
@@ -241,17 +251,17 @@ export default function StudentEditDialog({ open, onOpenChange, student, onSave 
       case 'identity':
         return (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="firstName">First Name</Label>
-              <Input id="firstName" value={formData.firstName} onChange={(e) => handleInputChange('firstName', e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="surname">Surname</Label>
-              <Input id="surname" value={formData.surname} onChange={(e) => handleInputChange('surname', e.target.value)} />
-            </div>
+            {/*<div className="space-y-2">*/}
+            {/*  <Label htmlFor="firstName">First Name</Label>*/}
+            {/*  <Input id="firstName" value={} onChange={(e) => handleInputChange('firstName', e.target.value)} />*/}
+            {/*</div>*/}
+            {/*<div className="space-y-2">*/}
+            {/*  <Label htmlFor="surname">Surname</Label>*/}
+            {/*  <Input id="surname" value={} onChange={(e) => handleInputChange('surname', e.target.value)} />*/}
+            {/*</div>*/}
             <div className="space-y-2">
               <Label htmlFor="middleName">Middle Name(s)</Label>
-              <Input id="middleName" value={formData.middleName} onChange={(e) => handleInputChange('middleName', e.target.value)} />
+              <Input id="middleName" value={formData.middleNames} onChange={(e) => handleInputChange('middleName', e.target.value)} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="preferredName">Preferred Name</Label>
@@ -337,7 +347,7 @@ export default function StudentEditDialog({ open, onOpenChange, student, onSave 
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="studentEmail">Student Email</Label>
-                  <Input id="studentEmail" type="email" value={formData.studentEmail} onChange={(e) => handleInputChange('studentEmail', e.target.value)} />
+                  <Input id="studentEmail" type="email" value={formData.email} onChange={(e) => handleInputChange('studentEmail', e.target.value)} />
                 </div>
               </div>
             </div>
@@ -713,13 +723,13 @@ export default function StudentEditDialog({ open, onOpenChange, student, onSave 
         </DialogHeader>
 
         {/* Step Indicators */}
-        <div className="flex items-center justify-between px-2 py-4 border-b overflow-x-auto">
+        <div className="flex items-center justify-between px-2 py-4 border-b overflow-hidden gap-4">
           {STEPS.map((step, index) => (
             <button
               key={step.id}
               onClick={() => setCurrentStep(index)}
               className={cn(
-                "flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap",
+                "flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap min-w-0",
                 index === currentStep
                   ? "bg-primary text-primary-foreground"
                   : index < currentStep
@@ -737,13 +747,13 @@ export default function StudentEditDialog({ open, onOpenChange, student, onSave 
               )}>
                 {index < currentStep ? <Check className="h-3 w-3" /> : index + 1}
               </span>
-              <span className="hidden md:inline">{step.label}</span>
+              <span className="hidden md:inline truncate">{step.label}</span>
             </button>
           ))}
         </div>
 
         {/* Step Content */}
-        <div className="flex-1 overflow-y-auto py-4 px-1">
+        <div className="flex-1 overflow-y-auto scrollbar-hide py-4 px-1">
           {renderStepContent()}
         </div>
 
@@ -764,9 +774,18 @@ export default function StudentEditDialog({ open, onOpenChange, student, onSave 
           </span>
 
           {currentStep === STEPS.length - 1 ? (
-            <Button onClick={handleSave} className="rounded-lg">
-              <Check className="mr-2 h-4 w-4" />
-              Save Changes
+            <Button onClick={handleSave} className="rounded-lg" disabled={isPending}>
+              {isPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Saving...
+                  </>
+              ) : (
+                  <>
+                    <Check className="mr-2 h-4 w-4" />
+                    Save Changes
+                  </>
+              )}
             </Button>
           ) : (
             <Button onClick={handleNext} className="rounded-lg">

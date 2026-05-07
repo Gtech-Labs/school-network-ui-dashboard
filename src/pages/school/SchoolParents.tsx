@@ -13,7 +13,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Search, Mail, Phone, MessageSquare, Users, Plus, Eye, ChevronLeft, ChevronRight } from 'lucide-react';
-import { mockParents, Parent, mockStudents } from '@/lib/mockData';
+import { Parent } from '@/pages/interfaces/parent.interface';
 import { useToast } from '@/hooks/use-toast';
 import { useTranslation } from 'react-i18next';
 import { ParentEditDialog } from '@/components/ParentEditDialog';
@@ -22,6 +22,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { toast as sonnerToast } from 'sonner';
+import { useParents, useDeleteParent } from '@/hooks/users/parent.hook';
+import { Skeleton } from '@/components/ui/skeleton';
+import { useAuth } from '@/context/AuthContext';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { Trash2 } from 'lucide-react';
+
 
 const ITEMS_PER_PAGE = 9;
 
@@ -36,35 +42,34 @@ export default function SchoolParents() {
   const { t } = useTranslation();
   const navigate = useNavigate();
 
-  const filteredParents = mockParents.filter(
-    (parent) =>
-      parent.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      parent.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      parent.children.some((child) =>
-        child.studentName.toLowerCase().includes(searchTerm.toLowerCase())
-      )
+  const { user: authUser } = useAuth();
+  const schoolId = authUser?.tenant_id || '';
+  const { data: parentsData, isLoading } = useParents(schoolId);
+  const { mutateAsync: deleteParent } = useDeleteParent();
+
+  const parents = parentsData?.data || [];
+
+  const filteredParents = parents.filter(
+    (parent: any) =>
+      parent.fullName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      parent.email?.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
 
   const totalPages = Math.ceil(filteredParents.length / ITEMS_PER_PAGE);
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
   const paginatedParents = filteredParents.slice(startIndex, startIndex + ITEMS_PER_PAGE);
 
-  const handleSendMessage = (parent: Parent) => {
-    setSelectedParent(parent);
-    setMessageDialogOpen(true);
-  };
-
-  const handleSendEmail = (parent: Parent) => {
+  const handleSendEmail = (parent: any) => {
     setSelectedParent(parent);
     setEmailDialogOpen(true);
   };
 
-  const handleAddParent = (data: Partial<Parent>) => {
-    toast({
-      title: 'Parent Added',
-      description: `${data.fullName} has been added successfully.`,
-    });
+
+  const handleAddParent = () => {
+    setAddDialogOpen(false);
   };
+
 
   const handleMessageSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -72,10 +77,7 @@ export default function SchoolParents() {
     setMessageDialogOpen(false);
   };
 
-  const totalStudentsCovered = mockParents.reduce(
-    (acc, parent) => acc + parent.children.length,
-    0
-  );
+
 
   return (
     <div className="space-y-6">
@@ -104,18 +106,20 @@ export default function SchoolParents() {
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{mockParents.length}</div>
+            <div className="text-2xl font-bold">{parents.length}</div>
             <p className="text-xs text-muted-foreground">{t('school.parents.registeredParents')}</p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">{t('school.parents.studentsCovered')}</CardTitle>
+            <CardTitle className="text-sm font-medium">Linked Students</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{totalStudentsCovered}</div>
-            <p className="text-xs text-muted-foreground">{t('school.parents.totalStudentsWithParents')}</p>
+            <div className="text-2xl font-bold">
+              {parents.reduce((acc: number, p: any) => acc + (p.students?.length || 0), 0)}
+            </div>
+            <p className="text-xs text-muted-foreground">Total students with linked parents</p>
           </CardContent>
         </Card>
         <Card className="sm:col-span-2 lg:col-span-1">
@@ -124,11 +128,12 @@ export default function SchoolParents() {
             <MessageSquare className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{mockParents.filter((p) => p.email).length}</div>
+            <div className="text-2xl font-bold">{parents.filter((p: any) => p.email).length}</div>
             <p className="text-xs text-muted-foreground">{t('school.parents.parentsWithEmail')}</p>
           </CardContent>
         </Card>
       </div>
+
 
       {/* Parents Table */}
       <Card>
@@ -158,58 +163,87 @@ export default function SchoolParents() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {paginatedParents.map((parent) => (
-                  <TableRow
-                    key={parent.id}
-                    className="cursor-pointer hover:bg-muted/50"
-                    onClick={() => navigate(`/school/parents/${parent.id}`)}
-                  >
-                    <TableCell className="font-medium whitespace-nowrap">{parent.fullName}</TableCell>
-                    <TableCell className="whitespace-nowrap">{parent.relationship}</TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1 max-w-[200px]">
-                        {parent.children.map((child) => (
-                          <Badge key={child.studentId} variant="outline" className="text-xs">
-                            {child.studentName}
-                          </Badge>
-                        ))}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="space-y-1 text-sm min-w-[180px]">
-                        <div className="flex items-center gap-1 text-muted-foreground">
-                          <Mail className="h-3 w-3 shrink-0" />
-                          <span className="truncate">{parent.email || 'N/A'}</span>
+                {isLoading ? (
+                  Array.from({ length: 5 }).map((_, i) => (
+                    <TableRow key={i}>
+                      <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-40" /></TableCell>
+                      <TableCell><Skeleton className="h-10 w-48" /></TableCell>
+                      <TableCell><Skeleton className="h-6 w-20" /></TableCell>
+                      <TableCell className="text-right"><Skeleton className="h-9 w-24 ml-auto" /></TableCell>
+                    </TableRow>
+                  ))
+                ) : paginatedParents.length > 0 ? (
+                  paginatedParents.map((parent: any) => (
+                    <TableRow
+                      key={parent.id}
+                      className="cursor-pointer hover:bg-muted/50"
+                      onClick={() => navigate(`/school/parents/${parent.id}`)}
+                    >
+                      <TableCell className="font-medium whitespace-nowrap">{parent.fullName}</TableCell>
+                      <TableCell className="whitespace-nowrap">{parent.relationship}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1 max-w-[200px]">
+                          {parent.students?.map((student: any) => (
+                            <Badge key={student.id} variant="outline" className="text-xs">
+                              {student.fullName}
+                            </Badge>
+                          )) || <span className="text-xs text-muted-foreground italic">None linked</span>}
                         </div>
-                        <div className="flex items-center gap-1 text-muted-foreground">
-                          <Phone className="h-3 w-3 shrink-0" />
-                          <span className="whitespace-nowrap">{parent.phone}</span>
+                      </TableCell>
+                      <TableCell>
+                        <div className="space-y-1 text-sm min-w-[180px]">
+                          <div className="flex items-center gap-1 text-muted-foreground">
+                            <Mail className="h-3 w-3 shrink-0" />
+                            <span className="truncate">{parent.email || 'N/A'}</span>
+                          </div>
+                          <div className="flex items-center gap-1 text-muted-foreground">
+                            <Phone className="h-3 w-3 shrink-0" />
+                            <span className="whitespace-nowrap">{parent.phone}</span>
+                          </div>
                         </div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={parent.status === 'Active' ? 'default' : 'secondary'}>
-                        {parent.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-2 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                        <Button variant="outline" size="sm" onClick={() => navigate(`/school/parents/${parent.id}`)} className="rounded-lg">
-                          <Eye className="mr-1 h-3 w-3" />
-                          <span className="hidden sm:inline">View</span>
-                        </Button>
-                        <Button variant="outline" size="sm" onClick={() => handleSendEmail(parent)} className="rounded-lg" disabled={!parent.email}>
-                          <Mail className="mr-1 h-3 w-3" />
-                          <span className="hidden sm:inline">{t('common.email')}</span>
-                        </Button>
-                        <Button variant="outline" size="sm" onClick={() => handleSendMessage(parent)} className="rounded-lg">
-                          <MessageSquare className="mr-1 h-3 w-3" />
-                          <span className="hidden sm:inline">{t('common.message')}</span>
-                        </Button>
-                      </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={parent.status === 'Active' ? 'default' : 'secondary'}>
+                          {parent.status || 'Active'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                          <Button variant="outline" size="sm" onClick={() => navigate(`/school/parents/${parent.id}`)} className="rounded-lg">
+                            <Eye className="mr-1 h-3 w-3" />
+                            View
+                          </Button>
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="rounded-lg text-destructive hover:bg-destructive/10"
+                            onClick={async () => {
+                              if (confirm('Are you sure you want to delete this parent profile?')) {
+                                try {
+                                  await deleteParent(parent.id);
+                                  sonnerToast.success("Parent profile deleted");
+                                } catch (error) {
+                                  sonnerToast.error("Failed to delete parent");
+                                }
+                              }
+                            }}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={6} className="h-32 text-center text-muted-foreground italic">
+                      No parents found.
                     </TableCell>
                   </TableRow>
-                ))}
+                )}
+
               </TableBody>
             </Table>
           </div>

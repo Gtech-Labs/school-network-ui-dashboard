@@ -75,9 +75,9 @@ export default function SchoolActivityLog() {
   // Apply search filters
   const filteredLogs = dateFilteredLogs.filter((log) => {
     const matchesSearch =
-      log.action.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      log.details.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      log.user.toLowerCase().includes(searchQuery.toLowerCase());
+      log.action?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      log.details?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      log.user?.toLowerCase().includes(searchQuery.toLowerCase());
 
     return matchesSearch;
   });
