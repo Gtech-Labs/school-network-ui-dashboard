@@ -17,9 +17,15 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { ChevronLeft, ChevronRight, X, Plus, User, Phone, Users, KeyRound, Shield } from 'lucide-react';
-import { Parent, mockStudents } from '@/lib/mockData';
+import { ChevronLeft, ChevronRight, X, Plus, User, Phone, Users, KeyRound, Shield, Search, Loader2 } from 'lucide-react';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { lookupStudentByIdNumber } from '@/api/students.api';
+import { getUserByEmail } from '@/api/users.api';
+import { useCreateParent, useUpdateParent } from '@/hooks/users/parent.hook';
+import { toast } from 'sonner';
+import { Parent } from '@/pages/interfaces/parent.interface';
+import { useAuth } from '@/context/AuthContext';
+
 
 interface ParentEditDialogProps {
   open: boolean;
@@ -48,49 +54,70 @@ const STEPS = [
 export function ParentEditDialog({ open, onOpenChange, parent, onSave, mode }: ParentEditDialogProps) {
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState({
-    parentId: '',
     fullName: '',
     relationship: 'Father' as 'Mother' | 'Father' | 'Guardian',
     phone: '',
     email: '',
+    address: '',
+    occupation: '',
+    idNumber: '',
     children: [] as ChildLink[],
     hasAccountAccess: false,
     loginMethod: 'password' as 'password' | 'otp',
     password: '',
     consentGiven: false,
+    accountStatus: 'Active',
   });
 
   // Child linking state
-  const [selectedStudent, setSelectedStudent] = useState('');
-  const [childSearchTerm, setChildSearchTerm] = useState('');
-  const [childDropdownOpen, setChildDropdownOpen] = useState(false);
+  const [studentIdInput, setStudentIdInput] = useState('');
+  const [isLinking, setIsLinking] = useState(false);
+
+  const { mutateAsync: createParent, isPending: isCreating } = useCreateParent();
+  const { mutateAsync: updateParent, isPending: isUpdating } = useUpdateParent(parent?.id || '');
+
+  const isPending = isCreating || isUpdating;
+  const { user: authUser } = useAuth();
+  const schoolId = authUser?.tenant_id || '';
+
 
   useEffect(() => {
     if (parent && mode === 'edit') {
       setFormData({
-        parentId: parent.id || '',
         fullName: parent.fullName || '',
         relationship: parent.relationship || 'Father',
         phone: parent.phone || '',
         email: parent.email || '',
-        children: parent.children || [],
+        address: parent.address || '',
+        occupation: parent.occupation || '',
+        idNumber: parent.idNumber || '',
+        children: parent.students ? parent.students.map((s: any) => ({
+          studentId: s.studentId || s.id,
+          studentName: s.fullName || s.name,
+          grade: s.grade,
+          class: s.class || s.classSection || s.grade,
+        })) : [],
         hasAccountAccess: parent.hasAccountAccess || false,
         loginMethod: parent.loginMethod || 'password',
         password: '',
         consentGiven: parent.consentGiven || false,
+        accountStatus: parent.status || 'Active',
       });
     } else {
       setFormData({
-        parentId: '',
         fullName: '',
         relationship: 'Father',
         phone: '',
         email: '',
+        address: '',
+        occupation: '',
+        idNumber: '',
         children: [],
         hasAccountAccess: false,
         loginMethod: 'password',
         password: '',
         consentGiven: false,
+        accountStatus: 'Active',
       });
     }
     setCurrentStep(1);
@@ -100,30 +127,42 @@ export function ParentEditDialog({ open, onOpenChange, parent, onSave, mode }: P
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleAddChild = () => {
-    if (!selectedStudent) return;
-    const student = mockStudents.find((s) => s.id === selectedStudent);
-    if (!student) return;
+  const handleLinkStudent = async () => {
+    if (!studentIdInput) return;
+    setIsLinking(true);
+    try {
+      const student = await lookupStudentByIdNumber(studentIdInput);
+      if (!student) {
+        toast.error("Student not found");
+        return;
+      }
 
-    // Check if already linked
-    if (formData.children.some((c) => c.studentId === student.id)) return;
+      // Check if already linked
+      if (formData.children.some((c) => c.studentId === student.id)) {
+        toast.error("Student already linked");
+        return;
+      }
 
-    const gradeMatch = student.class.match(/Grade (\d+)/);
-    const grade = gradeMatch ? `Grade ${gradeMatch[1]}` : student.class;
+      const newChild: ChildLink = {
+        studentId: student.id,
+        studentName: student.fullName,
+        grade: student.grade,
+        class: student.classSection || student.grade,
+      };
 
-    const newChild: ChildLink = {
-      studentId: student.id,
-      studentName: student.name,
-      grade,
-      class: student.class,
-    };
-
-    setFormData((prev) => ({
-      ...prev,
-      children: [...prev.children, newChild],
-    }));
-    setSelectedStudent('');
+      setFormData((prev) => ({
+        ...prev,
+        children: [...prev.children, newChild],
+      }));
+      setStudentIdInput('');
+      toast.success(`Linked ${student.fullName}`);
+    } catch (error) {
+      toast.error("Error finding student. Please check the ID number.");
+    } finally {
+      setIsLinking(false);
+    }
   };
+
 
   const handleRemoveChild = (studentId: string) => {
     setFormData((prev) => ({
@@ -144,15 +183,53 @@ export function ParentEditDialog({ open, onOpenChange, parent, onSave, mode }: P
     }
   };
 
-  const handleSave = () => {
-    onSave({
-      ...formData,
-      id: parent?.id || `${Date.now()}`,
-      createdAt: parent?.createdAt || new Date().toISOString().split('T')[0],
-      status: 'Active',
-    });
-    onOpenChange(false);
+  const handleSave = async () => {
+    try {
+      let userId = '';
+
+      if (mode === 'add') {
+        if (!formData.email) {
+          toast.error("Email is required to link parent to a user");
+          return;
+        }
+
+        try {
+          const userRes = await getUserByEmail(formData.email);
+          userId = userRes.data.id;
+        } catch (err) {
+          toast.error("No user found with this email. Please create the user first.");
+          return;
+        }
+      }
+
+      const payload = {
+        userId: userId || undefined,
+        fullName: formData.fullName,
+        address: formData.address,
+        occupation: formData.occupation,
+        relationship: formData.relationship,
+        phone: formData.phone,
+        email: formData.email,
+        accountStatus: formData.accountStatus,
+        consentGiven: formData.consentGiven,
+        idNumber: formData.idNumber,
+        childrenIds: formData.children.map(c => c.studentId),
+        schoolId: mode === 'add' ? schoolId : undefined,
+      };
+
+      if (mode === 'add') {
+        await createParent(payload as any);
+        toast.success("Parent created successfully");
+      } else {
+        await updateParent(payload as any);
+        toast.success("Parent updated successfully");
+      }
+      onOpenChange(false);
+    } catch (error) {
+      toast.error("Failed to save parent profile");
+    }
   };
+
 
   const isStepValid = () => {
     switch (currentStep) {
@@ -173,9 +250,7 @@ export function ParentEditDialog({ open, onOpenChange, parent, onSave, mode }: P
     }
   };
 
-  const availableStudents = mockStudents.filter(
-    (s) => !formData.children.some((c) => c.studentId === s.id)
-  );
+
 
   const renderStepContent = () => {
     switch (currentStep) {
@@ -183,12 +258,12 @@ export function ParentEditDialog({ open, onOpenChange, parent, onSave, mode }: P
         return (
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="parentId">Parent ID *</Label>
+              <Label htmlFor="idNumber">National ID Number *</Label>
               <Input
-                id="parentId"
-                value={formData.parentId || ''}
-                onChange={(e) => handleInputChange('parentId', e.target.value)}
-                placeholder="e.g. PAR-001"
+                id="idNumber"
+                value={formData.idNumber}
+                onChange={(e) => handleInputChange('idNumber', e.target.value)}
+                placeholder="Enter ID number"
               />
             </div>
             <div className="space-y-2">
@@ -233,7 +308,7 @@ export function ParentEditDialog({ open, onOpenChange, parent, onSave, mode }: P
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="email">Email (Optional)</Label>
+              <Label htmlFor="email">Email *</Label>
               <Input
                 id="email"
                 type="email"
@@ -242,57 +317,56 @@ export function ParentEditDialog({ open, onOpenChange, parent, onSave, mode }: P
                 placeholder="parent@example.com"
               />
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="occupation">Occupation</Label>
+              <Input
+                id="occupation"
+                value={formData.occupation}
+                onChange={(e) => handleInputChange('occupation', e.target.value)}
+                placeholder="e.g. Engineer"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="address">Residential Address</Label>
+              <Input
+                id="address"
+                value={formData.address}
+                onChange={(e) => handleInputChange('address', e.target.value)}
+                placeholder="123 Main St, Johannesburg"
+              />
+            </div>
           </div>
         );
 
       case 3:
-        const filteredAvailableStudents = childSearchTerm
-          ? availableStudents.filter((s) =>
-              s.name.toLowerCase().includes(childSearchTerm.toLowerCase())
-            )
-          : availableStudents;
-
         return (
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label>Link Children *</Label>
+              <Label>Link Child by ID Number *</Label>
               <div className="flex gap-2">
                 <div className="flex-1 relative">
                   <Input
-                    placeholder="Search student by name..."
-                    value={childSearchTerm}
-                    onChange={(e) => setChildSearchTerm(e.target.value)}
-                    onFocus={() => setChildDropdownOpen(true)}
+                    placeholder="Enter Student ID Number (e.g. 1234567890123)"
+                    value={studentIdInput}
+                    onChange={(e) => setStudentIdInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleLinkStudent();
+                      }
+                    }}
                   />
-                  {childDropdownOpen && filteredAvailableStudents.length > 0 && (
-                    <div className="absolute z-50 w-full mt-1 bg-popover border border-border rounded-md shadow-md max-h-[240px] overflow-y-auto">
-                      {filteredAvailableStudents.slice(0, 6).map((student) => (
-                        <button
-                          key={student.id}
-                          type="button"
-                          className="w-full text-left px-3 py-2 text-sm hover:bg-accent/50 transition-colors"
-                          onClick={() => {
-                            setSelectedStudent(student.id);
-                            setChildSearchTerm(student.name);
-                            setChildDropdownOpen(false);
-                          }}
-                        >
-                          {student.name} - {student.class}
-                        </button>
-                      ))}
-                      {filteredAvailableStudents.length > 6 && (
-                        <div className="px-3 py-2 text-xs text-muted-foreground border-t">
-                          Scroll or type to find more...
-                        </div>
-                      )}
-                    </div>
-                  )}
                 </div>
-                <Button type="button" onClick={() => { handleAddChild(); setChildSearchTerm(''); }} disabled={!selectedStudent}>
-                  <Plus className="h-4 w-4" />
+                <Button
+                  type="button"
+                  onClick={handleLinkStudent}
+                  disabled={!studentIdInput || isLinking}
+                >
+                  {isLinking ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Link now'}
                 </Button>
               </div>
             </div>
+
 
             {formData.children.length > 0 && (
               <div className="space-y-2">
@@ -396,8 +470,8 @@ export function ParentEditDialog({ open, onOpenChange, parent, onSave, mode }: P
             <div className="p-4 border rounded-lg bg-muted/50">
               <h4 className="font-medium mb-2">Data Processing Consent</h4>
               <p className="text-sm text-muted-foreground mb-4">
-                By checking the box below, the parent consents to the storage and processing of their personal data 
-                and agrees to receive notifications regarding their child's education, including announcements, 
+                By checking the box below, the parent consents to the storage and processing of their personal data
+                and agrees to receive notifications regarding their child's education, including announcements,
                 academic updates, and administrative communications.
               </p>
               <div className="flex items-start space-x-2">
@@ -421,7 +495,7 @@ export function ParentEditDialog({ open, onOpenChange, parent, onSave, mode }: P
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto scrollbar-hide">
         <DialogHeader>
           <DialogTitle>
             {mode === 'add' ? 'Add New Parent' : 'Edit Parent'}
@@ -435,21 +509,19 @@ export function ParentEditDialog({ open, onOpenChange, parent, onSave, mode }: P
             return (
               <div key={step.id} className="flex items-center">
                 <div
-                  className={`flex items-center justify-center w-10 h-10 rounded-full border-2 transition-colors ${
-                    currentStep === step.id
+                  className={`flex items-center justify-center w-10 h-10 rounded-full border-2 transition-colors ${currentStep === step.id
                       ? 'bg-primary text-primary-foreground border-primary'
                       : currentStep > step.id
-                      ? 'bg-primary/20 text-primary border-primary'
-                      : 'bg-muted text-muted-foreground border-muted'
-                  }`}
+                        ? 'bg-primary/20 text-primary border-primary'
+                        : 'bg-muted text-muted-foreground border-muted'
+                    }`}
                 >
                   <StepIcon className="h-5 w-5" />
                 </div>
                 {index < STEPS.length - 1 && (
                   <div
-                    className={`w-8 h-0.5 mx-1 ${
-                      currentStep > step.id ? 'bg-primary' : 'bg-muted'
-                    }`}
+                    className={`w-8 h-0.5 mx-1 ${currentStep > step.id ? 'bg-primary' : 'bg-muted'
+                      }`}
                   />
                 )}
               </div>
@@ -483,10 +555,12 @@ export function ParentEditDialog({ open, onOpenChange, parent, onSave, mode }: P
               <ChevronRight className="ml-2 h-4 w-4" />
             </Button>
           ) : (
-            <Button onClick={handleSave} disabled={!isStepValid()}>
+            <Button onClick={handleSave} disabled={!isStepValid() || isPending}>
+              {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {mode === 'add' ? 'Add Parent' : 'Save Changes'}
             </Button>
           )}
+
         </div>
       </DialogContent>
     </Dialog>

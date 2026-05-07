@@ -1,61 +1,65 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FileText, Search, Filter, ChevronLeft, ChevronRight } from 'lucide-react';
-import { mockApplications } from '@/lib/mockData';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useApplications } from '@/hooks/users/application.hook';
+import { useAuth } from '@/context/AuthContext';
+import { Skeleton } from '@/components/ui/skeleton';
+import { useSchoolId } from '@/hooks/schools/school.hook';
 
 const ITEMS_PER_PAGE = 10;
 
 const statusColors: Record<string, string> = {
-  'Submitted': 'bg-blue-500/10 text-blue-500 border-blue-500/20',
-  'Under Review': 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20',
-  'Waiting List A': 'bg-orange-500/10 text-orange-500 border-orange-500/20',
-  'Waiting List B': 'bg-orange-400/10 text-orange-400 border-orange-400/20',
-  'Provisionally Accepted': 'bg-purple-500/10 text-purple-500 border-purple-500/20',
-  'Accepted': 'bg-green-500/10 text-green-500 border-green-500/20',
-  'Parent Accepted Offer': 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20',
-  'Registered': 'bg-primary/10 text-primary border-primary/20',
+  'SUBMITTED': 'bg-blue-500/10 text-blue-500 border-blue-500/20',
+  'UNDER-REVIEW': 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20',
+  'WAITING-LIST-A': 'bg-orange-500/10 text-orange-500 border-orange-500/20',
+  'WAITING-LIST-B': 'bg-orange-400/10 text-orange-400 border-orange-400/20',
+  'PROVISIONALLY-ACCEPTED': 'bg-purple-500/10 text-purple-500 border-purple-500/20',
+  'ACCEPTED': 'bg-green-500/10 text-green-500 border-green-500/20',
+  'PARENT-ACCEPTED': 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20',
+  'REGISTERED': 'bg-primary/10 text-primary border-primary/20',
+  'REJECTED': 'bg-red-500/10 text-red-500 border-red-500/20',
+};
+
+const statusLabels: Record<string, string> = {
+  'SUBMITTED': 'Submitted',
+  'UNDER-REVIEW': 'Under Review',
+  'WAITING-LIST-A': 'Waiting List A',
+  'WAITING-LIST-B': 'Waiting List B',
+  'PROVISIONALLY-ACCEPTED': 'Provisionally Accepted',
+  'ACCEPTED': 'Accepted',
+  'PARENT-ACCEPTED': 'Parent Accepted Offer',
+  'REGISTERED': 'Registered',
+  'REJECTED': 'Rejected',
 };
 
 export default function SchoolApplications() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const schoolId = useSchoolId(user?.sub);
+  
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [dateFilter, setDateFilter] = useState<string>('all');
   const [currentPage, setCurrentPage] = useState(1);
 
-  // Filter applications
-  const filteredApplications = mockApplications.filter((app) => {
-    const matchesSearch =
-      app.studentName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      app.parentName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      app.email.toLowerCase().includes(searchTerm.toLowerCase());
+  // Query for stats (all school applications)
+  const { data: allApplications = [] } = useApplications({ 
+    schoolId: schoolId || undefined 
+  }, { enabled: !!schoolId });
 
-    const matchesStatus = statusFilter === 'all' || app.status === statusFilter;
-
-    let matchesDate = true;
-    if (dateFilter !== 'all') {
-      const submittedDate = new Date(app.submittedDate);
-      const now = new Date();
-      
-      if (dateFilter === 'today') {
-        matchesDate = submittedDate.toDateString() === now.toDateString();
-      } else if (dateFilter === 'week') {
-        const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-        matchesDate = submittedDate >= weekAgo;
-      } else if (dateFilter === 'month') {
-        const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-        matchesDate = submittedDate >= monthAgo;
-      }
-    }
-
-    return matchesSearch && matchesStatus && matchesDate;
-  });
+  // Query for filtered table
+  const { data: filteredApplications = [], isLoading } = useApplications({
+    schoolId: schoolId || undefined,
+    status: statusFilter !== 'all' ? statusFilter : undefined,
+    search: searchTerm || undefined,
+    dateFilter: dateFilter !== 'all' ? dateFilter : undefined,
+  }, { enabled: !!schoolId });
 
   // Pagination
   const totalPages = Math.ceil(filteredApplications.length / ITEMS_PER_PAGE);
@@ -91,7 +95,7 @@ export default function SchoolApplications() {
             <CardTitle className="text-sm font-medium text-muted-foreground">Total Applications</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{mockApplications.length}</div>
+            <div className="text-2xl font-bold">{allApplications.length}</div>
           </CardContent>
         </Card>
         <Card>
@@ -100,7 +104,7 @@ export default function SchoolApplications() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {mockApplications.filter((a) => a.status === 'Under Review').length}
+              {allApplications.filter((a: any) => a.status === 'UNDER-REVIEW').length}
             </div>
           </CardContent>
         </Card>
@@ -110,7 +114,7 @@ export default function SchoolApplications() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {mockApplications.filter((a) => a.status === 'Accepted').length}
+              {allApplications.filter((a: any) => a.status === 'ACCEPTED').length}
             </div>
           </CardContent>
         </Card>
@@ -120,7 +124,7 @@ export default function SchoolApplications() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {mockApplications.filter((a) => a.status === 'Registered').length}
+              {allApplications.filter((a: any) => a.status === 'REGISTERED').length}
             </div>
           </CardContent>
         </Card>
@@ -159,14 +163,15 @@ export default function SchoolApplications() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Statuses</SelectItem>
-                  <SelectItem value="Submitted">Submitted</SelectItem>
-                  <SelectItem value="Under Review">Under Review</SelectItem>
-                  <SelectItem value="Waiting List A">Waiting List A</SelectItem>
-                  <SelectItem value="Waiting List B">Waiting List B</SelectItem>
-                  <SelectItem value="Provisionally Accepted">Provisionally Accepted</SelectItem>
-                  <SelectItem value="Accepted">Accepted</SelectItem>
-                  <SelectItem value="Parent Accepted Offer">Parent Accepted Offer</SelectItem>
-                  <SelectItem value="Registered">Registered</SelectItem>
+                  <SelectItem value="SUBMITTED">Submitted</SelectItem>
+                  <SelectItem value="UNDER-REVIEW">Under Review</SelectItem>
+                  <SelectItem value="WAITING-LIST-A">Waiting List A</SelectItem>
+                  <SelectItem value="WAITING-LIST-B">Waiting List B</SelectItem>
+                  <SelectItem value="PROVISIONALLY-ACCEPTED">Provisionally Accepted</SelectItem>
+                  <SelectItem value="ACCEPTED">Accepted</SelectItem>
+                  <SelectItem value="PARENT-ACCEPTED">Parent Accepted Offer</SelectItem>
+                  <SelectItem value="REGISTERED">Registered</SelectItem>
+                  <SelectItem value="REJECTED">Rejected</SelectItem>
                 </SelectContent>
               </Select>
 
@@ -204,31 +209,47 @@ export default function SchoolApplications() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {currentApplications.length === 0 ? (
+                {isLoading ? (
+                  Array.from({ length: 5 }).map((_, i) => (
+                    <TableRow key={i}>
+                      <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                      <TableCell>
+                        <div className="space-y-2">
+                          <Skeleton className="h-4 w-40" />
+                          <Skeleton className="h-3 w-32" />
+                        </div>
+                      </TableCell>
+                      <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                      <TableCell><Skeleton className="h-6 w-24 rounded-full" /></TableCell>
+                      <TableCell className="text-right"><Skeleton className="h-8 w-16 ml-auto" /></TableCell>
+                    </TableRow>
+                  ))
+                ) : currentApplications.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
                       No applications found
                     </TableCell>
                   </TableRow>
                 ) : (
-                  currentApplications.map((application) => (
+                  currentApplications.map((application: any) => (
                     <TableRow
                       key={application.id}
                       className="cursor-pointer hover:bg-muted/50"
                       onClick={() => handleApplicationClick(application.id)}
                     >
-                      <TableCell className="font-medium">{application.studentName}</TableCell>
+                      <TableCell className="font-medium">{application.student?.fullName}</TableCell>
                       <TableCell>
                         <div className="flex flex-col">
-                          <span>{application.parentName}</span>
-                          <span className="text-xs text-muted-foreground">{application.email}</span>
+                          <span>{application.parent?.fullName}</span>
+                          <span className="text-xs text-muted-foreground">{application.parent?.email}</span>
                         </div>
                       </TableCell>
-                      <TableCell>{application.grade}</TableCell>
-                      <TableCell>{new Date(application.submittedDate).toLocaleDateString()}</TableCell>
+                      <TableCell>{application.student?.grade}</TableCell>
+                      <TableCell>{application.submittedAt ? new Date(application.submittedAt).toLocaleDateString() : 'N/A'}</TableCell>
                       <TableCell>
                         <Badge variant="outline" className={statusColors[application.status]}>
-                          {application.status}
+                          {statusLabels[application.status] || application.status}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">

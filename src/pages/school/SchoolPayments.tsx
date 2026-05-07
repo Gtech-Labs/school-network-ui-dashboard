@@ -35,8 +35,12 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Search, Banknote, TrendingUp, AlertCircle, CheckCircle, FileText, Loader2, CalendarIcon, Eye, Plus, Trash2 } from 'lucide-react';
-import { mockStudents } from '@/lib/mockData';
 import { useToast } from '@/hooks/use-toast';
+import { useApiQuery } from "@/hooks/use-api-query.ts";
+import { useAuth } from "@/context/AuthContext.tsx";
+import { useSchoolId } from "@/hooks/schools/school.hook.ts";
+import { Skeleton } from "@/components/ui/skeleton";
+
 import { formatCurrency } from '@/lib/currency';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
@@ -73,9 +77,6 @@ const months = [
 
 const paymentMethods = ['Cash', 'EFT', 'Mobile Money', 'Card', 'Cheque'];
 
-// Get unique grades from students
-const grades = [...new Set(mockStudents.map(s => s.class || 'Grade 10A'))].sort();
-
 export default function SchoolPayments() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -90,6 +91,19 @@ export default function SchoolPayments() {
   const [paymentMethod, setPaymentMethod] = useState('Cash');
   const { toast } = useToast();
   const { t } = useTranslation();
+  const { user } = useAuth();
+  const schoolId = useSchoolId(user?.sub);
+
+  // 1. Data Fetching
+  const { data: studentsResponse, isLoading: studentsLoading } = useApiQuery(
+      ['students', schoolId],
+      `/students/profiles-per-school?schoolId=${schoolId}`,
+      { enabled: !!schoolId }
+  );
+
+  const students = studentsResponse?.data || [];
+  const grades = [...new Set(students.map((s: any) => s.grade || s.classSection || 'Unassigned'))].sort();
+
 
   // Generate form state
   const [selectedTerm, setSelectedTerm] = useState('term1');
@@ -102,7 +116,7 @@ export default function SchoolPayments() {
   const [invoiceNotes, setInvoiceNotes] = useState('');
 
   // Filter students by selected grade
-  const studentsInGrade = mockStudents.filter(s => (s.class || 'Grade 10A') === selectedGrade);
+  const studentsInGrade = students.filter((s: any) => (s.grade || s.classSection || 'Unassigned') === selectedGrade);
   const filteredInvoices = invoices.filter((invoice) => {
     const matchesSearch =
       invoice.studentName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -184,9 +198,10 @@ export default function SchoolPayments() {
       id: `INV-${Date.now()}-${index}`,
       invoiceNumber: generateInvoiceNumber(existingCount + index),
       studentId: student.id,
-      studentName: student.name,
-      className: student.class || 'Grade 10A',
-      parentName: student.parentName || 'Parent Name',
+      studentName: student.fullName || student.name,
+      className: student.grade || student.classSection || 'Unassigned',
+      parentName: student.parentProfile?.fullName || 'Parent Name',
+
       feeItems: [...feeItems],
       totalAmount: calculateTotal(),
       status: 'Pending' as const,
@@ -319,7 +334,10 @@ export default function SchoolPayments() {
             <AlertCircle className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{mockStudents.length}</div>
+            <div className="text-2xl font-bold">
+              {studentsLoading ? <Skeleton className="h-8 w-12" /> : students.length}
+            </div>
+
             <p className="text-xs text-muted-foreground">{t('school.payments.enrolledStudents')}</p>
           </CardContent>
         </Card>
@@ -452,7 +470,7 @@ export default function SchoolPayments() {
                   <SelectContent>
                     {grades.map((grade) => (
                       <SelectItem key={grade} value={grade}>
-                        {grade} ({mockStudents.filter(s => (s.class || 'Grade 10A') === grade).length} {t('school.payments.students')})
+                        {grade} ({students.filter((s: any) => (s.grade || s.classSection || 'Unassigned') === grade).length} {t('school.payments.students')})
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -467,8 +485,9 @@ export default function SchoolPayments() {
                     <div className="flex flex-wrap gap-2">
                       {studentsInGrade.map((student) => (
                         <Badge key={student.id} variant="outline" className="text-xs">
-                          {student.name}
+                          {student.fullName || student.name}
                         </Badge>
+
                       ))}
                     </div>
                   </div>

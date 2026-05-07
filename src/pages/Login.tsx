@@ -52,7 +52,6 @@ export default function Login() {
 
                 const isExisting = (!isLoading && !isError && schools && schools.length > 0) && schools.some(school => school.tenant_id === tenantId);
                 localStorage.setItem('token', data.accessToken);
-                console.log("-------------------", typeof tenantId);
                 if(tenantId && tenantId === 'sn_network'){
                     console.log('Redirecting to admin dashboard');
                     return navigate('/admin', {replace: true});

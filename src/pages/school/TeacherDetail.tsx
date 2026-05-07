@@ -1,276 +1,227 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { mockTeachers } from '@/lib/mockData';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Edit, Trash2, Mail, Phone, BookOpen, Users } from 'lucide-react';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import TeacherEditDialog, { TeacherFormData } from '@/components/TeacherEditDialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { 
+    ArrowLeft, Edit, Trash2, Mail, Phone, BookOpen, Users, 
+    Calendar, Shield, Activity, Loader2, MoreVertical
+} from 'lucide-react';
+import { useTeacherDetail, useDeleteTeacher, useUpdateTeacher } from '@/hooks/users/teacher.hook';
+import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import TeacherEditDialog from '@/components/TeacherEditDialog';
 
 export default function TeacherDetail() {
-  const { id } = useParams();
-  const navigate = useNavigate();
-  const teacher = mockTeachers.find((t) => t.id === id);
+    const { id } = useParams();
+    const navigate = useNavigate();
+    const { data: teacherResponse, isLoading, isError } = useTeacherDetail(id!);
+    const { mutateAsync: deleteTeacher, isPending: isDeleting } = useDeleteTeacher();
+    const { mutateAsync: updateTeacher, isPending: isUpdating } = useUpdateTeacher(id!);
 
-  const [editDialogOpen, setEditDialogOpen] = useState(false);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+    const [editDialogOpen, setEditDialogOpen] = useState(false);
 
-  if (!teacher) {
+    const teacher = teacherResponse?.user;
+
+    const handleDelete = async () => {
+        try {
+            await deleteTeacher(id!);
+            toast.success("Teacher removed successfully");
+            navigate('/school/teachers');
+        } catch (error) {
+            toast.error("Failed to remove teacher");
+        }
+    };
+
+    const handleSuspend = async () => {
+        try {
+            await updateTeacher({ status: teacher.status === 'Active' ? 'Suspended' : 'Active' });
+            toast.success(`Teacher ${teacher.status === 'Active' ? 'suspended' : 'activated'} successfully`);
+        } catch (error) {
+            toast.error("Failed to update status");
+        }
+    };
+
+    if (isLoading) {
+        return (
+            <div className="space-y-6 p-6">
+                <Skeleton className="h-10 w-32" />
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <Skeleton className="h-64 md:col-span-1" />
+                    <Skeleton className="h-64 md:col-span-2" />
+                </div>
+            </div>
+        );
+    }
+
+    if (isError || !teacher) {
+        return (
+            <div className="p-12 text-center">
+                <h2 className="text-2xl font-bold">Teacher not found</h2>
+                <Button variant="link" onClick={() => navigate('/school/teachers')}>Back to teachers</Button>
+            </div>
+        );
+    }
+
     return (
-      <div className="space-y-6 animate-fade-in">
-        <Button variant="ghost" onClick={() => navigate('/school/teachers')}>
-          <ArrowLeft className="mr-2 h-4 w-4" /> Back to Teachers
-        </Button>
-        <Card>
-          <CardContent className="py-12 text-center">
-            <p className="text-muted-foreground">Teacher not found</p>
-          </CardContent>
-        </Card>
-      </div>
+        <div className="space-y-6 animate-fade-in">
+            <div className="flex items-center justify-between">
+                <Button variant="ghost" onClick={() => navigate('/school/teachers')} className="gap-2">
+                    <ArrowLeft className="h-4 w-4" /> Back to Teachers
+                </Button>
+                <div className="flex gap-2">
+                    <Button variant="outline" onClick={() => setEditDialogOpen(true)} className="gap-2">
+                        <Edit className="h-4 w-4" /> Edit
+                    </Button>
+                    <Button 
+                        variant="outline" 
+                        onClick={handleSuspend} 
+                        disabled={isUpdating}
+                        className={teacher.status === 'Active' ? 'text-orange-500' : 'text-green-500'}
+                    >
+                        {isUpdating ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                        {teacher.status === 'Active' ? 'Suspend' : 'Activate'}
+                    </Button>
+                    <Button variant="destructive" onClick={() => setDeleteDialogOpen(true)} className="gap-2">
+                        <Trash2 className="h-4 w-4" /> Delete
+                    </Button>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Profile Card */}
+                <Card className="lg:col-span-1 border-border/50">
+                    <CardContent className="pt-6 text-center">
+                        <div className="h-24 w-24 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-3xl mx-auto mb-4">
+                            {teacher?.fullName?.charAt(0) || '?'}
+                        </div>
+                        <h2 className="text-2xl font-bold">{teacher?.fullName || 'Unnamed Teacher'}</h2>
+                        <Badge className="mt-2" variant={teacher.status === 'Active' ? 'default' : 'secondary'}>
+                            {teacher.status || 'Active'}
+                        </Badge>
+
+                        <div className="mt-8 space-y-4 text-left">
+                            <div className="flex items-center gap-3 text-sm">
+                                <Mail className="h-4 w-4 text-muted-foreground" />
+                                <span>{teacher.email || 'No email'}</span>
+                            </div>
+                            <div className="flex items-center gap-3 text-sm">
+                                <Phone className="h-4 w-4 text-muted-foreground" />
+                                <span>{teacher.phone || 'No phone'}</span>
+                            </div>
+                            <div className="flex items-center gap-3 text-sm">
+                                <Shield className="h-4 w-4 text-muted-foreground" />
+                                <span>ID: {teacher.id.split('-')[0].toUpperCase()}</span>
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                {/* Details Card */}
+                <Card className="lg:col-span-2 border-border/50">
+                    <CardHeader>
+                        <CardTitle>Teacher Information</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <Tabs defaultValue="overview">
+                            <TabsList className="grid grid-cols-3 mb-6">
+                                <TabsTrigger value="overview">Overview</TabsTrigger>
+                                <TabsTrigger value="academic">Academic</TabsTrigger>
+                                <TabsTrigger value="activity">Activity</TabsTrigger>
+                            </TabsList>
+                            
+                            <TabsContent value="overview" className="space-y-6">
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-1">
+                                        <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Full Name</p>
+                                        <p className="font-medium">{teacher?.fullName || '—'}</p>
+                                    </div>
+                                    <div className="space-y-1">
+                                        <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Contact Number</p>
+                                        <p className="font-medium">{teacher.phone || '—'}</p>
+                                    </div>
+                                    <div className="space-y-1">
+                                        <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Email Address</p>
+                                        <p className="font-medium">{teacher.email || '—'}</p>
+                                    </div>
+                                    <div className="space-y-1">
+                                        <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Employment Status</p>
+                                        <p className="font-medium">{teacher.status || 'Active'}</p>
+                                    </div>
+                                </div>
+                            </TabsContent>
+
+                            <TabsContent value="academic" className="space-y-6">
+                                <div className="space-y-4">
+                                    <div className="space-y-2">
+                                        <div className="flex items-center gap-2 text-sm font-semibold">
+                                            <BookOpen className="h-4 w-4 text-primary" /> Subjects Taught
+                                        </div>
+                                        <div className="flex flex-wrap gap-2">
+                                            {teacher.subjects?.length ? teacher.subjects.map((s: string) => (
+                                                <Badge key={s} variant="outline">{s}</Badge>
+                                            )) : <span className="text-sm text-muted-foreground italic">No subjects assigned</span>}
+                                        </div>
+                                    </div>
+                                    <div className="space-y-2 pt-4">
+                                        <div className="flex items-center gap-2 text-sm font-semibold">
+                                            <Users className="h-4 w-4 text-primary" /> Assigned Classes
+                                        </div>
+                                        <div className="flex flex-wrap gap-2">
+                                            {teacher.assignedClasses?.length ? teacher.assignedClasses.map((c: string) => (
+                                                <Badge key={c} variant="secondary">{c}</Badge>
+                                            )) : <span className="text-sm text-muted-foreground italic">No classes assigned</span>}
+                                        </div>
+                                    </div>
+                                </div>
+                            </TabsContent>
+
+                            <TabsContent value="activity">
+                                <div className="py-8 text-center text-muted-foreground">
+                                    <Activity className="h-12 w-12 mx-auto mb-2 opacity-20" />
+                                    <p>Activity logs will appear here.</p>
+                                </div>
+                            </TabsContent>
+                        </Tabs>
+                    </CardContent>
+                </Card>
+            </div>
+
+            <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This will permanently delete the teacher profile for <strong>{teacher?.fullName || 'this teacher'}</strong> and remove their access to the system.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                            {isDeleting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                            Delete Permanently
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            <TeacherEditDialog 
+                open={editDialogOpen} 
+                onOpenChange={setEditDialogOpen} 
+                teacher={teacher} 
+            />
+        </div>
     );
-  }
-
-  return (
-    <div className="space-y-6 animate-fade-in">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" onClick={() => navigate('/school/teachers')} className="rounded-lg">
-            <ArrowLeft className="mr-2 h-4 w-4" /> Back
-          </Button>
-          <div>
-            <h2 className="text-3xl font-bold tracking-tight">{teacher.name}</h2>
-            <p className="text-muted-foreground">{teacher.subject}</p>
-          </div>
-          <Badge variant={teacher.status === 'Active' ? 'default' : 'secondary'} className="rounded-lg">
-            {teacher.status}
-          </Badge>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" className="rounded-lg" onClick={() => setEditDialogOpen(true)}>
-            <Edit className="mr-2 h-4 w-4" /> Edit
-          </Button>
-          <Button variant="destructive" className="rounded-lg" onClick={() => setDeleteDialogOpen(true)}>
-            <Trash2 className="mr-2 h-4 w-4" /> Delete
-          </Button>
-        </div>
-      </div>
-
-      {/* Info Cards */}
-      <div className="grid gap-6 md:grid-cols-2">
-        {/* Personal Information */}
-        <Card>
-          <CardContent className="pt-6 space-y-4">
-            <div className="pb-4 border-b">
-              <h3 className="text-xl font-semibold mb-1">Personal Information</h3>
-              <p className="text-sm text-muted-foreground">Identity and demographic details</p>
-            </div>
-            <div className="space-y-0 border rounded-md overflow-hidden">
-              <div className="p-4 border-b">
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Full Name</label>
-                <p className="text-base font-medium mt-1">{teacher.name}</p>
-              </div>
-              <div className="grid grid-cols-2">
-                <div className="p-4 border-b border-r">
-                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">ID Number</label>
-                  <p className="text-base mt-1 text-muted-foreground italic">Not provided</p>
-                </div>
-                <div className="p-4 border-b">
-                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Gender</label>
-                  <p className="text-base mt-1 text-muted-foreground italic">Not provided</p>
-                </div>
-              </div>
-              <div className="grid grid-cols-2">
-                <div className="p-4 border-r">
-                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Date of Birth</label>
-                  <p className="text-base mt-1 text-muted-foreground italic">Not provided</p>
-                </div>
-                <div className="p-4">
-                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Nationality</label>
-                  <p className="text-base mt-1 text-muted-foreground italic">Not provided</p>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Contact Information */}
-        <Card>
-          <CardContent className="pt-6 space-y-4">
-            <div className="pb-4 border-b">
-              <h3 className="text-xl font-semibold mb-1">Contact Information</h3>
-              <p className="text-sm text-muted-foreground">Communication and emergency details</p>
-            </div>
-            <div className="space-y-0 border rounded-md overflow-hidden">
-              <div className="p-4 border-b">
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Email</label>
-                <div className="flex items-center gap-2 mt-1">
-                  <Mail className="h-4 w-4 text-muted-foreground" />
-                  <p className="text-base font-medium">{teacher.email}</p>
-                </div>
-              </div>
-              <div className="p-4 border-b">
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Phone</label>
-                <div className="flex items-center gap-2 mt-1">
-                  <Phone className="h-4 w-4 text-muted-foreground" />
-                  <p className="text-base font-medium">{teacher.phone}</p>
-                </div>
-              </div>
-              <div className="p-4 border-b">
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Home Address</label>
-                <p className="text-base mt-1 text-muted-foreground italic">Not provided</p>
-              </div>
-              <div className="grid grid-cols-2">
-                <div className="p-4 border-r">
-                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Emergency Contact</label>
-                  <p className="text-base mt-1 text-muted-foreground italic">Not provided</p>
-                </div>
-                <div className="p-4">
-                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Emergency Phone</label>
-                  <p className="text-base mt-1 text-muted-foreground italic">Not provided</p>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Academic Information */}
-        <Card>
-          <CardContent className="pt-6 space-y-4">
-            <div className="pb-4 border-b">
-              <h3 className="text-xl font-semibold mb-1">Academic Information</h3>
-              <p className="text-sm text-muted-foreground">Subjects, classes, and qualifications</p>
-            </div>
-            <div className="space-y-0 border rounded-md overflow-hidden">
-              <div className="p-4 border-b">
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Subject</label>
-                <div className="flex items-center gap-2 mt-1">
-                  <BookOpen className="h-4 w-4 text-muted-foreground" />
-                  <p className="text-base font-medium">{teacher.subject}</p>
-                </div>
-              </div>
-              <div className="p-4 border-b">
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Assigned Classes</label>
-                <div className="flex flex-wrap gap-1 mt-2">
-                  {teacher.classes.map((cls) => (
-                    <Badge key={cls} variant="secondary" className="flex items-center gap-1">
-                      <Users className="h-3 w-3" /> {cls}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-              <div className="grid grid-cols-2">
-                <div className="p-4 border-r">
-                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Qualifications</label>
-                  <p className="text-base mt-1 text-muted-foreground italic">Not provided</p>
-                </div>
-                <div className="p-4">
-                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Years of Experience</label>
-                  <p className="text-base mt-1 text-muted-foreground italic">Not provided</p>
-                </div>
-              </div>
-              <div className="grid grid-cols-2">
-                <div className="p-4 border-r">
-                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Specializations</label>
-                  <p className="text-base mt-1 text-muted-foreground italic">Not provided</p>
-                </div>
-                <div className="p-4">
-                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Certifications</label>
-                  <p className="text-base mt-1 text-muted-foreground italic">Not provided</p>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Employment Information */}
-        <Card>
-          <CardContent className="pt-6 space-y-4">
-            <div className="pb-4 border-b">
-              <h3 className="text-xl font-semibold mb-1">Employment Details</h3>
-              <p className="text-sm text-muted-foreground">Contract, salary, and banking</p>
-            </div>
-            <div className="space-y-0 border rounded-md overflow-hidden">
-              <div className="grid grid-cols-2">
-                <div className="p-4 border-b border-r">
-                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Employment Type</label>
-                  <p className="text-base mt-1 text-muted-foreground italic">Not provided</p>
-                </div>
-                <div className="p-4 border-b">
-                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Start Date</label>
-                  <p className="text-base mt-1 text-muted-foreground italic">Not provided</p>
-                </div>
-              </div>
-              <div className="grid grid-cols-2">
-                <div className="p-4 border-b border-r">
-                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Contract End Date</label>
-                  <p className="text-base mt-1 text-muted-foreground italic">Not provided</p>
-                </div>
-                <div className="p-4 border-b">
-                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Salary</label>
-                  <p className="text-base mt-1 text-muted-foreground italic">Not provided</p>
-                </div>
-              </div>
-              <div className="grid grid-cols-2">
-                <div className="p-4 border-r">
-                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Bank Name</label>
-                  <p className="text-base mt-1 text-muted-foreground italic">Not provided</p>
-                </div>
-                <div className="p-4">
-                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Account Number</label>
-                  <p className="text-base mt-1 text-muted-foreground italic">Not provided</p>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Edit Dialog */}
-      <TeacherEditDialog
-        open={editDialogOpen}
-        onOpenChange={setEditDialogOpen}
-        teacher={teacher}
-        onSave={(_data: TeacherFormData) => {
-          toast.success('Teacher information updated successfully');
-        }}
-      />
-
-      {/* Delete Confirmation */}
-      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Teacher</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to permanently delete {teacher.name}? This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                toast.success(`${teacher.name} has been deleted`);
-                setDeleteDialogOpen(false);
-                navigate('/school/teachers');
-              }}
-              className="bg-destructive hover:bg-destructive/90"
-            >
-              Delete Permanently
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </div>
-  );
 }

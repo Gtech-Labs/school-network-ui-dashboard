@@ -12,7 +12,7 @@ async function mutateData<T>({ data, endpoint, method, requiresAuth = true }: Mu
     const baseUrl = import.meta.env.VITE_API_URL;
 
     // 1. Retrieve the token (Example using localStorage)
-    const token = localStorage.getItem('auth_token');
+    const token = localStorage.getItem('token');
 
     const headers: Record<string, string> = {
         'Content-Type': 'application/json',

@@ -139,9 +139,18 @@ export default function SchoolDetail() {
     };
 
     const handleDelete = () => {
-        toast.success(`${school.name} has been deleted`);
-        mutate({method: 'DELETE', endpoint: `school/${id}`, data: {}})
-        navigate('/admin/schools');
+
+        mutate({method: 'DELETE', endpoint: `schools/${id}`, data: {}}, {
+            onSuccess: () => {
+                queryClient.invalidateQueries({queryKey: ['schools']}).then(r => console.log('invalidated'));
+                toast.success(`${school.name} has been deleted`);
+                navigate('/admin/schools');
+            },
+            onError: (err) => {
+                toast.error("Failed to delete school");
+                console.error(err);
+            }
+        });
     };
 
     const handleFeatureToggle = (feature: keyof typeof features) => {

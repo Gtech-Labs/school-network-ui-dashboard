@@ -1,139 +1,242 @@
-import { useState } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import React, { useState, useRef } from 'react';
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogFooter,
+} from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { UserPlus, Upload } from 'lucide-react';
+import { useCreateTeacher } from '@/hooks/users/teacher.hook';
+import { useSchoolId } from '@/hooks/schools/school.hook';
+import { useAuth } from '@/context/AuthContext';
 import { toast } from 'sonner';
-
-type Mode = 'choose' | 'single' | 'bulk';
+import { Loader2, Upload, Download, FileSpreadsheet, CheckCircle2, AlertCircle, UserPlus, Users } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import * as XLSX from 'xlsx';
 
 interface AddTeacherDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
 }
 
-export function AddTeacherDialog({ open, onOpenChange }: AddTeacherDialogProps) {
-  const [mode, setMode] = useState<Mode>('choose');
-  const [form, setForm] = useState({ name: '', subjects: '', email: '', phone: '', classes: '' });
+const BULK_COLUMNS = ['fullName', 'email', 'phone', 'subjects', 'assignedClasses'];
 
-  const handleClose = () => {
-    setMode('choose');
-    setForm({ name: '', subjects: '', email: '', phone: '', classes: '' });
-    onOpenChange(false);
-  };
+export default function AddTeacherDialog({ open, onOpenChange }: AddTeacherDialogProps) {
+    const [mode, setMode] = useState<'choose' | 'single' | 'bulk'>('choose');
+    const { user } = useAuth();
+    const schoolId = useSchoolId(user?.sub);
+    const { mutateAsync: createTeacher, isPending } = useCreateTeacher();
 
-  const handleSubmitSingle = () => {
-    if (!form.name || !form.subjects || !form.email || !form.phone || !form.classes) {
-      toast.error('Please fill in all fields');
-      return;
-    }
-    toast.success(`Teacher ${form.name} added successfully`);
-    handleClose();
-  };
+    // Single Form State
+    const [formData, setFormData] = useState({
+        fullName: '',
+        email: '',
+        phone: '',
+    });
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const validTypes = [
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'application/vnd.ms-excel',
-      'text/csv',
-    ];
-    if (!validTypes.includes(file.type)) {
-      toast.error('Please upload a valid spreadsheet file (.xlsx, .xls, or .csv)');
-      return;
-    }
-    toast.success(`File "${file.name}" uploaded. Teachers will be imported shortly.`);
-    handleClose();
-  };
+    // Bulk State
+    const [bulkFile, setBulkFile] = useState<File | null>(null);
+    const [bulkRows, setBulkRows] = useState<any[]>([]);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
-  return (
-    <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>
-            {mode === 'choose' && 'Add Teacher'}
-            {mode === 'single' && 'Add Single Teacher'}
-            {mode === 'bulk' && 'Upload Teacher List'}
-          </DialogTitle>
-        </DialogHeader>
+    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setFormData(prev => ({ ...prev, [e.target.id]: e.target.value }));
+    };
 
-        {mode === 'choose' && (
-          <div className="grid grid-cols-2 gap-4 py-4">
-            <button
-              onClick={() => setMode('single')}
-              className="flex flex-col items-center gap-3 rounded-lg border border-border p-6 hover:bg-accent/50 transition-colors"
-            >
-              <UserPlus className="h-8 w-8 text-primary" />
-              <span className="text-sm font-medium">Single Teacher</span>
-              <span className="text-xs text-muted-foreground text-center">Add one teacher manually</span>
-            </button>
-            <button
-              onClick={() => setMode('bulk')}
-              className="flex flex-col items-center gap-3 rounded-lg border border-border p-6 hover:bg-accent/50 transition-colors"
-            >
-              <Upload className="h-8 w-8 text-primary" />
-              <span className="text-sm font-medium">Upload Spreadsheet</span>
-              <span className="text-xs text-muted-foreground text-center">Import multiple teachers</span>
-            </button>
-          </div>
-        )}
+    const handleSubmitSingle = async () => {
+        if (!formData.fullName) {
+            toast.error("Full name is required");
+            return;
+        }
+        if (!formData.email) {
+            toast.error("Email address is required");
+            return;
+        }
+        try {
+            await createTeacher({
+                ...formData,
+                schoolId,
+            });
+            toast.success("Teacher added successfully");
+            onOpenChange(false);
+            setFormData({ fullName: '', email: '', phone: '' });
+        } catch (error) {
+            toast.error("Failed to add teacher");
+        }
+    };
 
-        {mode === 'single' && (
-          <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label htmlFor="teacherName">Full Name</Label>
-              <Input id="teacherName" placeholder="e.g. Dr. James Anderson" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="teacherSubjects">Subjects (comma separated)</Label>
-              <Input id="teacherSubjects" placeholder="e.g. Mathematics, Physics" value={form.subjects} onChange={(e) => setForm({ ...form, subjects: e.target.value })} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="teacherEmail">Contact Email</Label>
-              <Input id="teacherEmail" type="email" placeholder="e.g. teacher@school.edu" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="teacherPhone">Phone</Label>
-              <Input id="teacherPhone" placeholder="e.g. +27 XX XXX XXXX" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="teacherClasses">Classes (comma separated)</Label>
-              <Input id="teacherClasses" placeholder="e.g. Grade 10-A, Grade 11-B" value={form.classes} onChange={(e) => setForm({ ...form, classes: e.target.value })} />
-            </div>
-            <DialogFooter className="gap-2">
-              <Button variant="outline" onClick={() => setMode('choose')}>Back</Button>
-              <Button onClick={handleSubmitSingle}>Add Teacher</Button>
-            </DialogFooter>
-          </div>
-        )}
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        setBulkFile(file);
 
-        {mode === 'bulk' && (
-          <div className="space-y-4 py-2">
-            <p className="text-sm text-muted-foreground">
-              Upload a spreadsheet (.xlsx, .xls, or .csv) with the following columns:
-            </p>
-            <div className="rounded-md border border-border p-3 bg-muted/30">
-              <p className="text-xs font-mono font-medium">Name | Subjects (comma separated) | Contact Email | Phone | Classes</p>
-            </div>
-            <div className="flex items-center justify-center w-full">
-              <label
-                htmlFor="teacher-file-upload"
-                className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-border rounded-lg cursor-pointer hover:bg-accent/30 transition-colors"
-              >
-                <Upload className="h-8 w-8 text-muted-foreground mb-2" />
-                <span className="text-sm text-muted-foreground">Click to upload or drag and drop</span>
-                <span className="text-xs text-muted-foreground">.xlsx, .xls, .csv</span>
-                <input id="teacher-file-upload" type="file" className="hidden" accept=".xlsx,.xls,.csv" onChange={handleFileUpload} />
-              </label>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setMode('choose')}>Back</Button>
-            </DialogFooter>
-          </div>
-        )}
-      </DialogContent>
-    </Dialog>
-  );
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+            const bstr = evt.target?.result;
+            const wb = XLSX.read(bstr, { type: 'binary' });
+            const wsname = wb.SheetNames[0];
+            const ws = wb.Sheets[wsname];
+            const data = XLSX.utils.sheet_to_json(ws);
+            
+            const processed = data.map((row: any) => {
+                const subjects = row.subjects ? String(row.subjects).split('|').map(s => s.trim()) : [];
+                const assignedClasses = row.assignedClasses ? String(row.assignedClasses).split('|').map(s => s.trim()) : [];
+                return {
+                    ...row,
+                    subjects,
+                    assignedClasses,
+                    _valid: !!row.fullName && !!row.email,
+                };
+            });
+            setBulkRows(processed);
+        };
+        reader.readAsBinaryString(file);
+    };
+
+    const handleSubmitBulk = async () => {
+        const validRows = bulkRows.filter(r => r._valid);
+        if (validRows.length === 0) return;
+
+        try {
+            for (const row of validRows) {
+                const { _valid, ...payload } = row;
+                await createTeacher({ ...payload, schoolId });
+            }
+            toast.success(`${validRows.length} teachers imported successfully`);
+            onOpenChange(false);
+            setBulkFile(null);
+            setBulkRows([]);
+        } catch (error) {
+            toast.error("Error during bulk import");
+        }
+    };
+
+    const downloadTemplate = () => {
+        const ws = XLSX.utils.json_to_sheet([
+            { fullName: 'John Doe', email: 'john@example.com', phone: '123456789', subjects: 'Math|Physics', assignedClasses: '10A|11B' }
+        ]);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Teachers");
+        XLSX.writeFile(wb, "teacher_import_template.xlsx");
+    };
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className={cn(mode === 'bulk' && bulkRows.length > 0 ? "max-w-4xl" : "max-w-md", "max-h-[90vh] overflow-y-auto scrollbar-hide")}>
+                <DialogHeader>
+                    <DialogTitle>Add New Teacher</DialogTitle>
+                </DialogHeader>
+
+                {mode === 'choose' && (
+                    <div className="grid grid-cols-2 gap-4 py-8">
+                        <Button
+                            variant="outline"
+                            className="h-32 flex flex-col gap-3 rounded-xl border-2 hover:border-primary hover:bg-primary/5"
+                            onClick={() => setMode('single')}
+                        >
+                            <UserPlus className="h-8 w-8 text-primary" />
+                            <span>Add One Teacher</span>
+                        </Button>
+                        <Button
+                            variant="outline"
+                            className="h-32 flex flex-col gap-3 rounded-xl border-2 hover:border-primary hover:bg-primary/5"
+                            onClick={() => setMode('bulk')}
+                        >
+                            <Users className="h-8 w-8 text-primary" />
+                            <span>Bulk Import</span>
+                        </Button>
+                    </div>
+                )}
+
+                {mode === 'single' && (
+                    <div className="space-y-4 py-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="fullName">Full Name</Label>
+                            <Input id="fullName" value={formData.fullName} onChange={handleInputChange} placeholder="Enter teacher's full name" />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="email">Email Address</Label>
+                            <Input id="email" type="email" value={formData.email} onChange={handleInputChange} placeholder="teacher@school.com" />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="phone">Phone Number (Optional)</Label>
+                            <Input id="phone" value={formData.phone} onChange={handleInputChange} placeholder="+123456789" />
+                        </div>
+                        <DialogFooter className="pt-4">
+                            <Button variant="outline" onClick={() => setMode('choose')}>Back</Button>
+                            <Button onClick={handleSubmitSingle} disabled={isPending}>
+                                {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                Add Teacher
+                            </Button>
+                        </DialogFooter>
+                    </div>
+                )}
+
+                {mode === 'bulk' && (
+                    <div className="space-y-4 py-4">
+                        <div className="rounded-lg border bg-muted/20 p-4 space-y-2 text-sm">
+                            <p className="font-medium">Spreadsheet columns required:</p>
+                            <div className="flex flex-wrap gap-2">
+                                {BULK_COLUMNS.map(col => (
+                                    <code key={col} className="bg-muted px-1.5 py-0.5 rounded border text-xs">{col}</code>
+                                ))}
+                            </div>
+                            <p className="text-xs text-muted-foreground pt-1">
+                                Subjects and Classes should be separated by a pipe character (|).
+                            </p>
+                        </div>
+
+                        <Button variant="outline" className="w-full gap-2" onClick={downloadTemplate}>
+                            <Download className="h-4 w-4" /> Download Template
+                        </Button>
+
+                        {!bulkFile ? (
+                            <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-xl cursor-pointer hover:bg-accent/30 transition-all">
+                                <Upload className="h-8 w-8 text-muted-foreground mb-2" />
+                                <span className="text-sm">Click to upload or drag and drop</span>
+                                <input type="file" className="hidden" accept=".xlsx,.xls,.csv" onChange={handleFileChange} />
+                            </label>
+                        ) : (
+                            <div className="space-y-4">
+                                <div className="max-h-64 overflow-auto border rounded-lg">
+                                    <table className="w-full text-xs">
+                                        <thead className="bg-muted sticky top-0">
+                                            <tr>
+                                                <th className="p-2 text-left w-10">Valid</th>
+                                                {BULK_COLUMNS.map(col => <th key={col} className="p-2 text-left capitalize">{col}</th>)}
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {bulkRows.map((row, i) => (
+                                                <tr key={i} className="border-t">
+                                                    <td className="p-2">
+                                                        {row._valid ? <CheckCircle2 className="h-4 w-4 text-green-500" /> : <AlertCircle className="h-4 w-4 text-destructive" />}
+                                                    </td>
+                                                    <td className="p-2">{row.fullName}</td>
+                                                    <td className="p-2">{row.email}</td>
+                                                    <td className="p-2">{row.phone}</td>
+                                                    <td className="p-2">{row.subjects?.join(', ')}</td>
+                                                    <td className="p-2">{row.assignedClasses?.join(', ')}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <DialogFooter>
+                                    <Button variant="outline" onClick={() => { setBulkFile(null); setBulkRows([]); }}>Clear</Button>
+                                    <Button onClick={handleSubmitBulk} disabled={isPending || bulkRows.filter(r => r._valid).length === 0}>
+                                        {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                        Import {bulkRows.filter(r => r._valid).length} Teachers
+                                    </Button>
+                                </DialogFooter>
+                            </div>
+                        )}
+                    </div>
+                )}
+            </DialogContent>
+        </Dialog>
+    );
 }

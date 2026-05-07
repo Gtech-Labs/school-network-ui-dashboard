@@ -13,53 +13,32 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Megaphone, Send, Clock, Users } from 'lucide-react';
+import { Megaphone, Send, Clock, Users, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-
-interface Announcement {
-  id: string;
-  title: string;
-  message: string;
-  audience: string;
-  date: string;
-  status: 'Sent' | 'Draft';
-}
-
-const mockAnnouncements: Announcement[] = [
-  {
-    id: '1',
-    title: 'Winter Break Notice',
-    message: 'School will be closed from Dec 20 to Jan 5 for winter break.',
-    audience: 'All Parents',
-    date: '2024-01-02',
-    status: 'Sent',
-  },
-  {
-    id: '2',
-    title: 'Parent-Teacher Meeting',
-    message: 'Annual parent-teacher meetings scheduled for next week.',
-    audience: 'All Parents',
-    date: '2024-01-10',
-    status: 'Sent',
-  },
-  {
-    id: '3',
-    title: 'Sports Day Announcement',
-    message: 'Annual sports day will be held on February 15th.',
-    audience: 'Students',
-    date: '2024-01-15',
-    status: 'Draft',
-  },
-];
+import { useAuth } from '@/context/AuthContext';
+import { useUserWithProfile } from '@/hooks/users/user.hook';
+import { useAnnouncements, useAnnouncementStats, useCreateAnnouncement } from '@/hooks/announcements.hook';
+import { DeliveryMethod, UserRole } from '@/api/announcements.api';
+import { format } from 'date-fns';
 
 const grades = ['Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5', 'Grade 6', 'Grade 7', 'Grade 8', 'Grade 9', 'Grade 10', 'Grade 11', 'Grade 12'];
 
 export default function SchoolAnnouncements() {
-  const [announcements] = useState<Announcement[]>(mockAnnouncements);
+  const { user } = useAuth();
+  const { data: userProfile } = useUserWithProfile(user?.sub || '');
+  const schoolId = userProfile?.schoolAdminProfile?.school?.id || '';
+
+  const { data: announcementsData, isLoading } = useAnnouncements(schoolId);
+  const announcements = announcementsData?.data || [];
+  
+  const { data: stats } = useAnnouncementStats(schoolId);
+  const { mutate: createAnnouncement, isPending } = useCreateAnnouncement();
+
   const [title, setTitle] = useState('');
   const [message, setMessage] = useState('');
   const [audience, setAudience] = useState('all');
   const [selectedGrades, setSelectedGrades] = useState<string[]>([]);
+  const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>(DeliveryMethod.BOTH);
   const { toast } = useToast();
 
   const handleGradeToggle = (grade: string) => {
@@ -105,15 +84,40 @@ export default function SchoolAnnouncements() {
       return;
     }
 
-    toast({
-      title: 'Announcement Sent',
-      description: `Your announcement has been sent to ${getAudienceDisplay()}`,
-    });
+    let targetRoles: UserRole[] | undefined;
+    if (audience === 'parents') targetRoles = [UserRole.PARENT];
+    if (audience === 'students') targetRoles = [UserRole.STUDENT];
+    if (audience === 'teachers') targetRoles = [UserRole.TEACHER];
+    if (audience === 'parents-by-grade') targetRoles = [UserRole.PARENT];
+    if (audience === 'students-by-grade') targetRoles = [UserRole.STUDENT];
 
-    setTitle('');
-    setMessage('');
-    setAudience('all');
-    setSelectedGrades([]);
+    createAnnouncement({
+      title,
+      message,
+      targetRoles,
+      targetGrades: selectedGrades.length > 0 ? selectedGrades : undefined,
+      deliveryMethod,
+      schoolId
+    }, {
+      onSuccess: () => {
+        toast({
+          title: 'Announcement Sent',
+          description: `Your announcement has been sent to ${getAudienceDisplay()}`,
+        });
+        setTitle('');
+        setMessage('');
+        setAudience('all');
+        setSelectedGrades([]);
+        setDeliveryMethod(DeliveryMethod.BOTH);
+      },
+      onError: () => {
+        toast({
+          title: 'Error',
+          description: 'Failed to send announcement. Please try again.',
+          variant: 'destructive',
+        });
+      }
+    });
   };
 
   return (
@@ -128,7 +132,7 @@ export default function SchoolAnnouncements() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid gap-6 md:grid-cols-3">
+      <div className="grid gap-6 md:grid-cols-2">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Sent</CardTitle>
@@ -136,33 +140,23 @@ export default function SchoolAnnouncements() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {announcements.filter((a) => a.status === 'Sent').length}
+              {stats?.totalCount || 0}
             </div>
-            <p className="text-xs text-muted-foreground">This month</p>
+            <p className="text-xs text-muted-foreground">All time</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Draft</CardTitle>
+            <CardTitle className="text-sm font-medium">Delivery Breakdown</CardTitle>
             <Clock className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {announcements.filter((a) => a.status === 'Draft').length}
+            <div className="text-sm">
+              <div className="flex justify-between"><span>Email:</span> <span className="font-medium">{stats?.deliveryStats?.find((s: any) => s.method === 'EMAIL')?.count || 0}</span></div>
+              <div className="flex justify-between"><span>Push:</span> <span className="font-medium">{stats?.deliveryStats?.find((s: any) => s.method === 'PUSH')?.count || 0}</span></div>
+              <div className="flex justify-between"><span>Both:</span> <span className="font-medium">{stats?.deliveryStats?.find((s: any) => s.method === 'BOTH')?.count || 0}</span></div>
             </div>
-            <p className="text-xs text-muted-foreground">Pending announcements</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Reach</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">250+</div>
-            <p className="text-xs text-muted-foreground">Total recipients</p>
           </CardContent>
         </Card>
       </div>
@@ -248,12 +242,29 @@ export default function SchoolAnnouncements() {
               </div>
             )}
 
+            <div className="space-y-2">
+              <Label htmlFor="deliveryMethod">Delivery Method</Label>
+              <Select value={deliveryMethod} onValueChange={(value) => setDeliveryMethod(value as DeliveryMethod)}>
+                <SelectTrigger id="deliveryMethod">
+                  <SelectValue placeholder="Select delivery method" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={DeliveryMethod.BOTH}>Both (Push & Email)</SelectItem>
+                  <SelectItem value={DeliveryMethod.PUSH}>Push Notification Only</SelectItem>
+                  <SelectItem value={DeliveryMethod.EMAIL}>Email Only</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="flex gap-2">
-              <Button onClick={handleSendAnnouncement} className="flex-1">
-                <Send className="mr-2 h-4 w-4" />
+              <Button onClick={handleSendAnnouncement} className="flex-1" disabled={isPending || !schoolId}>
+                {isPending ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="mr-2 h-4 w-4" />
+                )}
                 Send Announcement
               </Button>
-              <Button variant="outline">Save Draft</Button>
             </div>
           </CardContent>
         </Card>
@@ -265,19 +276,19 @@ export default function SchoolAnnouncements() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
-              {announcements.map((announcement) => (
+              {isLoading ? (
+                <div className="flex justify-center p-8"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
+              ) : announcements.length === 0 ? (
+                <div className="text-center p-8 text-muted-foreground">No announcements found.</div>
+              ) : announcements.map((announcement: any) => (
                 <div
                   key={announcement.id}
                   className="rounded-lg border p-4 transition-colors hover:bg-muted/50"
                 >
                   <div className="mb-2 flex items-start justify-between">
                     <h4 className="font-semibold">{announcement.title}</h4>
-                    <Badge
-                      variant={
-                        announcement.status === 'Sent' ? 'default' : 'secondary'
-                      }
-                    >
-                      {announcement.status}
+                    <Badge variant="default">
+                      {announcement.deliveryMethod}
                     </Badge>
                   </div>
                   <p className="mb-3 text-sm text-muted-foreground">
@@ -286,11 +297,12 @@ export default function SchoolAnnouncements() {
                   <div className="flex items-center justify-between text-xs text-muted-foreground">
                     <span className="flex items-center gap-1">
                       <Users className="h-3 w-3" />
-                      {announcement.audience}
+                      {announcement.targetRoles?.join(', ') || 'All'} 
+                      {announcement.targetGrades ? ` (${announcement.targetGrades.join(', ')})` : ''}
                     </span>
                     <span className="flex items-center gap-1">
                       <Clock className="h-3 w-3" />
-                      {announcement.date}
+                      {format(new Date(announcement.createdAt), 'MMM dd, yyyy HH:mm')}
                     </span>
                   </div>
                 </div>

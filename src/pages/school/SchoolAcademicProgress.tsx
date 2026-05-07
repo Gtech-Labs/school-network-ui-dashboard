@@ -12,6 +12,14 @@ import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { toast as sonnerToast } from 'sonner';
+import * as academicApi from '@/api/academic.api';
+import { useAcademicRecords, useCreateAcademicRecord, useUpdateAcademicRecord, useDeleteAcademicRecord, useBulkValidate, useBulkCreate } from '@/hooks/academic.hook';
+import { useAuth } from '@/context/AuthContext';
+import { useUserWithProfile } from '@/hooks/users/user.hook';
+import { useSubjects } from '@/hooks/schools/subject.hook';
+import * as XLSX from 'xlsx';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Pagination,
   PaginationContent,
@@ -31,12 +39,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 
-// Mock data for dropdowns
-const terms = ['Term 1', 'Term 2', 'Term 3', 'Term 4'];
-const classes = ['Grade 9-A', 'Grade 9-B', 'Grade 10-A', 'Grade 10-B', 'Grade 11-A', 'Grade 11-B'];
-const subjects = ['Mathematics', 'English', 'Science', 'History', 'Geography', 'Physical Education'];
-
-// Mock student data for validation
+// Mock student data for validation (Static for now as it's for simulation)
 const mockClassStudents: Record<string, Array<{ id: string; name: string }>> = {
   'Grade 10-A': [
     { id: 'STU001', name: 'Emma Johnson' },
@@ -77,45 +80,6 @@ const mockClassStudents: Record<string, Array<{ id: string; name: string }>> = {
     { id: 'STU026', name: 'David King' },
     { id: 'STU027', name: 'Victoria Wright' },
   ],
-};
-
-// Mock saved grades data for overview
-const generateMockGrades = (): GradeRecord[] => {
-  const records: GradeRecord[] = [];
-  let id = 1;
-  
-  Object.entries(mockClassStudents).forEach(([className, students]) => {
-    students.forEach(student => {
-      subjects.forEach(subject => {
-        terms.forEach(term => {
-          if (Math.random() > 0.3) { // 70% chance of having a grade
-            const mark = Math.floor(Math.random() * 50) + 50;
-            records.push({
-              id: id++,
-              studentId: student.id,
-              studentName: student.name,
-              class: className,
-              subject,
-              term,
-              mark,
-              grade: getGradeFromMarkStatic(mark),
-              status: mark >= 50 ? 'Pass' : 'Fail',
-            });
-          }
-        });
-      });
-    });
-  });
-  
-  return records;
-};
-
-const getGradeFromMarkStatic = (mark: number): string => {
-  if (mark >= 80) return 'A';
-  if (mark >= 70) return 'B';
-  if (mark >= 60) return 'C';
-  if (mark >= 50) return 'D';
-  return 'F';
 };
 
 interface ParsedMark {
@@ -159,6 +123,57 @@ export default function SchoolAcademicProgress() {
   const [selectedTerm, setSelectedTerm] = useState('');
   const [selectedClass, setSelectedClass] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('');
+  const { user } = useAuth();
+  const { data: userProfile, isLoading: isLoadingProfile } = useUserWithProfile(user?.sub || '');
+  const school = userProfile?.schoolAdminProfile?.school;
+
+  const { data: schoolSubjects, isLoading: isLoadingSubjects } = useSubjects(userProfile?.schoolAdminProfile?.school?.id || '');
+
+  // Dynamic configuration from school profile
+  const terms = school?.academicTermsCount
+    ? Array.from({ length: Number(school.academicTermsCount) }, (_, i) => `Term ${i + 1}`)
+    : ['Term 1', 'Term 2', 'Term 3', 'Term 4'];
+  const classes = school?.gradesOffered || [];
+  const subjects = schoolSubjects?.map((s: any) => s.name) || [];
+
+  const getGradeFromMarkStatic = (mark: number): string => {
+    if (mark >= 80) return 'A';
+    if (mark >= 70) return 'B';
+    if (mark >= 60) return 'C';
+    if (mark >= 50) return 'D';
+    return 'F';
+  };
+
+  const generateMockGrades = (): GradeRecord[] => {
+    const records: GradeRecord[] = [];
+    let id = 1;
+
+    Object.entries(mockClassStudents).forEach(([className, students]) => {
+      students.forEach(student => {
+        subjects.forEach(subject => {
+          terms.forEach(term => {
+            if (Math.random() > 0.3) { // 70% chance of having a grade
+              const mark = Math.floor(Math.random() * 50) + 50;
+              records.push({
+                id: id++,
+                studentId: student.id,
+                studentName: student.name,
+                class: className,
+                subject,
+                term,
+                mark,
+                grade: getGradeFromMarkStatic(mark),
+                status: mark >= 50 ? 'Pass' : 'Fail',
+              });
+            }
+          });
+        });
+      });
+    });
+
+    return records;
+  };
+
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
 
   // Processing state
@@ -178,23 +193,40 @@ export default function SchoolAcademicProgress() {
   const [editingMark, setEditingMark] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [actionReason, setActionReason] = useState('');
+  const [showReasonDialog, setShowReasonDialog] = useState(false);
+  const [pendingAction, setPendingAction] = useState<{ type: 'update' | 'delete', id: string, data?: any } | null>(null);
+
+  const { data: realGrades, isLoading: isLoadingGrades } = useAcademicRecords({
+    grade: overviewFilterClass === 'all' ? undefined : overviewFilterClass,
+    subject: overviewFilterSubject === 'all' ? undefined : overviewFilterSubject,
+    term: overviewFilterTerm === 'all' ? undefined : overviewFilterTerm,
+  });
+
+  const { mutateAsync: createRecord, isPending: isCreating } = useCreateAcademicRecord();
+  const { mutateAsync: updateRecord, isPending: isUpdating } = useUpdateAcademicRecord(pendingAction?.id || '');
+  const { mutateAsync: deleteRecord, isPending: isDeleting } = useDeleteAcademicRecord();
+  const { mutateAsync: validateBulk, isPending: isValidatingBulk } = useBulkValidate();
+  const { mutateAsync: createBulk, isPending: isCreatingBulk } = useBulkCreate();
 
   const canUpload = selectedTerm && selectedClass && selectedSubject;
   const hasValidMarks = parsedMarks.some(m => m.status === 'valid');
   const invalidCount = parsedMarks.filter(m => m.status !== 'valid').length;
 
   // Filter grades for overview
-  const filteredGrades = overviewGrades.filter(grade => {
-    if (overviewFilterClass !== 'all' && grade.class !== overviewFilterClass) return false;
+  const displayedGrades = (realGrades || overviewGrades).filter((grade: any) => {
+    if (overviewFilterClass !== 'all' && (grade.class || grade.grade) !== overviewFilterClass) return false;
     if (overviewFilterSubject !== 'all' && grade.subject !== overviewFilterSubject) return false;
     if (overviewFilterTerm !== 'all' && grade.term !== overviewFilterTerm) return false;
-    if (searchQuery && !grade.studentName.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+
+    const studentName = grade.student?.fullName || grade.studentName || '';
+    if (searchQuery && !studentName.toLowerCase().includes(searchQuery.toLowerCase())) return false;
     return true;
   });
 
-  const totalPages = Math.ceil(filteredGrades.length / ITEMS_PER_PAGE);
-  const paginatedGrades = filteredGrades.slice(
+  const totalPages = Math.ceil(displayedGrades.length / ITEMS_PER_PAGE);
+  const paginatedGrades = displayedGrades.slice(
     (currentPage - 1) * ITEMS_PER_PAGE,
     currentPage * ITEMS_PER_PAGE
   );
@@ -208,13 +240,13 @@ export default function SchoolAcademicProgress() {
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       ];
       const extension = file.name.split('.').pop()?.toLowerCase();
-      
+
       if (validTypes.includes(file.type) || extension === 'csv' || extension === 'xlsx' || extension === 'xls') {
         setUploadedFile(file);
         setParsedMarks([]);
         setTermSummary([]);
         setValidationComplete(false);
-        simulateFileProcessing(file);
+        processFile(file);
       } else {
         toast({
           title: t('academicProgress.invalidFileType'),
@@ -225,71 +257,88 @@ export default function SchoolAcademicProgress() {
     }
   };
 
-  const simulateFileProcessing = (file: File) => {
+  const processFile = (file: File) => {
     setIsProcessing(true);
     setProcessingProgress(0);
 
-    const progressInterval = setInterval(() => {
-      setProcessingProgress(prev => {
-        if (prev >= 100) {
-          clearInterval(progressInterval);
-          return 100;
-        }
-        return prev + 10;
-      });
-    }, 150);
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const data = e.target?.result;
+      const workbook = XLSX.read(data, { type: 'binary' });
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      const rawJson = XLSX.utils.sheet_to_json(worksheet) as any[];
 
-    setTimeout(() => {
-      clearInterval(progressInterval);
-      setProcessingProgress(100);
-      
-      const students = mockClassStudents[selectedClass] || [];
-      const mockParsedData: ParsedMark[] = students.map((student, index) => {
-        if (index === 0) {
-          return {
-            studentId: student.id,
-            studentName: student.name,
-            mark: Math.floor(Math.random() * 40) + 60,
-            status: 'valid' as const,
-          };
-        } else if (index === 1 && students.length > 2) {
-          return {
-            studentId: student.id,
-            studentName: student.name,
-            mark: null,
-            status: 'missing' as const,
-            errorMessage: t('academicProgress.markMissing'),
-          };
-        } else if (index === 2 && students.length > 3) {
-          return {
-            studentId: student.id,
-            studentName: student.name,
-            mark: 150,
-            status: 'invalid' as const,
-            errorMessage: t('academicProgress.markOutOfRange'),
-          };
-        } else {
-          return {
-            studentId: student.id,
-            studentName: student.name,
-            mark: Math.floor(Math.random() * 50) + 50,
-            status: 'valid' as const,
-          };
-        }
+      // Filter out completely empty rows
+      const filteredJson = rawJson.filter(row =>
+        Object.values(row).some(val => val !== null && val !== undefined && val !== '')
+      );
+
+      const mappedRecords = filteredJson.map(row => {
+        const achievedRaw = row.achievedScore ?? row.mark ?? row['Mark'];
+        const maxRaw = row.maxScore ?? row['Max Score'] ?? 100;
+
+        return {
+          studentId: (row.studentId || row.idNumber || row['Student ID'])?.toString(),
+          subject: row.subject || row['Subject'] || selectedSubject,
+          term: row.term || row['Term'] || selectedTerm,
+          grade: row.grade || row['Grade'] || row.class || row['Class'] || selectedClass,
+          achievedScore: (achievedRaw !== undefined && achievedRaw !== '') ? Number(achievedRaw) : null,
+          maxScore: (maxRaw !== undefined && maxRaw !== '') ? Number(maxRaw) : 100,
+          assessmentType: row.assessmentType || row['Assessment Type'] || 'EXAM',
+          assessmentTitle: row.assessmentTitle || row['Assessment Title'] || 'Bulk Upload',
+          date: row.date || row['Date'] || new Date().toISOString().split('T')[0],
+          remarks: row.remarks || row['Remarks'],
+        };
       });
 
-      mockParsedData.push({
-        studentId: 'UNKNOWN001',
-        studentName: 'Unknown Student',
-        mark: 75,
-        status: 'invalid' as const,
-        errorMessage: t('academicProgress.studentNotFound'),
-      });
+      setProcessingProgress(50);
 
-      setParsedMarks(mockParsedData);
-      setIsProcessing(false);
-      setValidationComplete(true);
-    }, 1800);
+      if (mappedRecords.length === 0) {
+        sonnerToast.error("No data found in file");
+        setIsProcessing(false);
+        return;
+      }
+
+      try {
+        const validationResults = await validateBulk(mappedRecords);
+        setParsedMarks(validationResults.map((res: any) => ({
+          studentId: res.studentIdNumber, // Use National ID if available
+          studentName: res.studentName,
+          mark: res.achievedScore,
+          status: res.status,
+          errorMessage: res.notes !== '-' ? res.notes : undefined,
+          originalData: res,
+        })));
+        setValidationComplete(true);
+        setProcessingProgress(100);
+      } catch (err: any) {
+        console.error("Bulk validation error:", err.response?.data || err.message);
+        sonnerToast.error(`Failed to validate records: ${err.response?.data?.message || err.message}`);
+      } finally {
+        setIsProcessing(false);
+      }
+    };
+    reader.readAsBinaryString(file);
+  };
+
+  const handleBulkUpload = async () => {
+    const validRecords = parsedMarks
+      .filter(m => m.status === 'valid')
+      .map(m => m.originalData);
+
+    if (validRecords.length === 0) {
+      sonnerToast.error("No valid records to upload");
+      return;
+    }
+
+    try {
+      const response = await createBulk(validRecords);
+      sonnerToast.success(`Successfully uploaded ${response.data.successCount} records`);
+      handleReset();
+    } catch (err) {
+      sonnerToast.error("Failed to upload records");
+    }
   };
 
   const getGradeFromMark = (mark: number): string => {
@@ -300,23 +349,20 @@ export default function SchoolAcademicProgress() {
     return 'F';
   };
 
-  const handleSaveMarks = () => {
-    const validMarks = parsedMarks.filter(m => m.status === 'valid' && m.mark !== null);
-    
-    const summary: TermSummary[] = validMarks.map(m => ({
-      studentId: m.studentId,
-      studentName: m.studentName,
-      mark: m.mark!,
-      grade: getGradeFromMark(m.mark!),
-      status: m.mark! >= 50 ? 'Pass' : 'Fail',
-    }));
-
-    setTermSummary(summary);
-
-    toast({
-      title: t('academicProgress.marksImported'),
-      description: t('academicProgress.marksImportedDesc', { count: validMarks.length }),
-    });
+  const handleDownloadTemplate = async (format: 'csv' | 'spreadsheet') => {
+    try {
+      const response = await academicApi.downloadTemplate(format);
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      const filename = format === 'csv' ? 'marks_template.csv' : 'marks_template.xls';
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (error) {
+      sonnerToast.error("Failed to download template");
+    }
   };
 
   const handleReset = () => {
@@ -335,40 +381,21 @@ export default function SchoolAcademicProgress() {
   };
 
   // Overview handlers
-  const handleEditGrade = (record: GradeRecord) => {
+  const handleEditGrade = (record: any) => {
     setEditingId(record.id);
-    setEditingMark(record.mark.toString());
+    const existingMark = record.achievedScore ?? record.mark;
+    setEditingMark(existingMark?.toString() || '0');
   };
 
-  const handleSaveEdit = (id: number) => {
+  const handleSaveEdit = (id: string) => {
     const mark = parseInt(editingMark, 10);
     if (isNaN(mark) || mark < 0 || mark > 100) {
-      toast({
-        title: t('academicProgress.invalidMark'),
-        description: t('academicProgress.markMustBeBetween'),
-        variant: 'destructive',
-      });
+      sonnerToast.error(t('academicProgress.invalidMark'));
       return;
     }
 
-    setOverviewGrades(prev =>
-      prev.map(g =>
-        g.id === id
-          ? {
-              ...g,
-              mark,
-              grade: getGradeFromMark(mark),
-              status: mark >= 50 ? 'Pass' : 'Fail',
-            }
-          : g
-      )
-    );
-    setEditingId(null);
-    setEditingMark('');
-    toast({
-      title: t('academicProgress.gradeUpdated'),
-      description: t('academicProgress.gradeUpdatedDesc'),
-    });
+    setPendingAction({ type: 'update', id, data: { achievedScore: mark } });
+    setShowReasonDialog(true);
   };
 
   const handleCancelEdit = () => {
@@ -376,33 +403,69 @@ export default function SchoolAcademicProgress() {
     setEditingMark('');
   };
 
-  const handleDeleteClick = (id: number) => {
+  const handleDeleteClick = (id: string) => {
     setDeletingId(id);
-    setDeleteDialogOpen(true);
+    setPendingAction({ type: 'delete', id });
+    setShowReasonDialog(true);
   };
 
-  const handleConfirmDelete = () => {
-    if (deletingId !== null) {
-      setOverviewGrades(prev => prev.filter(g => g.id !== deletingId));
-      toast({
-        title: t('academicProgress.gradeDeleted'),
-        description: t('academicProgress.gradeDeletedDesc'),
-      });
+  const handleConfirmAction = async () => {
+    if (!actionReason) {
+      sonnerToast.error("Reason is required");
+      return;
     }
-    setDeleteDialogOpen(false);
-    setDeletingId(null);
+
+    try {
+      if (pendingAction?.type === 'update') {
+        await updateRecord({ ...pendingAction.data, changeReason: actionReason });
+        sonnerToast.success("Grade updated successfully");
+        setEditingId(null);
+      } else if (pendingAction?.type === 'delete') {
+        await deleteRecord({ id: pendingAction.id, reason: actionReason });
+        sonnerToast.success("Grade deleted successfully");
+      }
+      setShowReasonDialog(false);
+      setActionReason('');
+      setPendingAction(null);
+    } catch (error) {
+      sonnerToast.error("Action failed");
+    }
   };
 
   const handleFilterChange = () => {
     setCurrentPage(1);
   };
 
+  const [manualAddOpen, setManualAddOpen] = useState(false);
+
+  if (isLoadingProfile) {
+    return (
+      <div className="space-y-6">
+        <Skeleton className="h-10 w-48" />
+        <Card>
+          <CardContent className="p-8">
+            <div className="flex flex-col items-center justify-center space-y-4">
+              <Loader2 className="h-12 w-12 animate-spin text-primary" />
+              <p className="text-muted-foreground font-medium">Loading school configuration...</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Page Header */}
-      <div>
-        <h1 className="text-2xl md:text-3xl font-bold tracking-tight">{t('academicProgress.title')}</h1>
-        <p className="text-muted-foreground mt-1">{t('academicProgress.subtitle')}</p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">{t('academicProgress.title')}</h1>
+          <p className="text-muted-foreground mt-1">{t('academicProgress.subtitle')}</p>
+        </div>
+        <Button onClick={() => setManualAddOpen(true)} className="flex items-center gap-2">
+          <Pencil className="h-4 w-4" />
+          {t('academicProgress.addMarkManually')}
+        </Button>
       </div>
 
       {/* Tabs */}
@@ -472,17 +535,29 @@ export default function SchoolAcademicProgress() {
 
           {/* File Upload Card */}
           <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">{t('academicProgress.uploadFile')}</CardTitle>
-              <CardDescription>{t('academicProgress.uploadFileDesc')}</CardDescription>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="text-lg">{t('academicProgress.uploadFile')}</CardTitle>
+                <CardDescription>{t('academicProgress.uploadFileDesc')}</CardDescription>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={() => handleDownloadTemplate('csv')} className="flex items-center gap-2">
+                  <FileSpreadsheet className="h-4 w-4" />
+                  CSV Template
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => handleDownloadTemplate('spreadsheet')} className="flex items-center gap-2">
+                  <FileSpreadsheet className="h-4 w-4" />
+                  Spreadsheet Template
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               {!uploadedFile ? (
                 <div
                   className={cn(
                     'border-2 border-dashed rounded-lg p-8 text-center transition-colors',
-                    canUpload 
-                      ? 'border-border hover:border-primary cursor-pointer' 
+                    canUpload
+                      ? 'border-border hover:border-primary cursor-pointer'
                       : 'border-muted bg-muted/30 cursor-not-allowed'
                   )}
                   onClick={() => canUpload && fileInputRef.current?.click()}
@@ -571,13 +646,12 @@ export default function SchoolAcademicProgress() {
                         <TableHead>{t('academicProgress.studentId')}</TableHead>
                         <TableHead>{t('academicProgress.studentName')}</TableHead>
                         <TableHead className="text-center">{t('academicProgress.mark')}</TableHead>
-                        <TableHead>{t('common.status')}</TableHead>
                         <TableHead>{t('academicProgress.notes')}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {parsedMarks.map((mark, index) => (
-                        <TableRow 
+                        <TableRow
                           key={index}
                           className={cn(
                             mark.status !== 'valid' && 'bg-destructive/5'
@@ -588,25 +662,12 @@ export default function SchoolAcademicProgress() {
                           <TableCell className="text-center font-medium">
                             {mark.mark !== null ? mark.mark : '-'}
                           </TableCell>
-                          <TableCell>
-                            {mark.status === 'valid' ? (
-                              <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-200">
-                                <CheckCircle className="h-3 w-3 mr-1" />
-                                {t('academicProgress.valid')}
-                              </Badge>
-                            ) : mark.status === 'missing' ? (
-                              <Badge variant="outline" className="bg-yellow-500/10 text-yellow-600 border-yellow-200">
-                                <AlertCircle className="h-3 w-3 mr-1" />
-                                {t('academicProgress.missing')}
-                              </Badge>
-                            ) : (
-                              <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/20">
-                                <AlertCircle className="h-3 w-3 mr-1" />
-                                {t('academicProgress.invalid')}
-                              </Badge>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-sm text-muted-foreground">
+                          <TableCell className={cn(
+                            "text-sm",
+                            mark.status === 'invalid' && "text-destructive font-medium",
+                            mark.status === 'missing' && "text-yellow-600 font-medium",
+                            mark.status === 'valid' && "text-muted-foreground"
+                          )}>
                             {mark.errorMessage || '-'}
                           </TableCell>
                         </TableRow>
@@ -619,19 +680,18 @@ export default function SchoolAcademicProgress() {
                   <Button variant="outline" onClick={handleReset}>
                     {t('common.cancel')}
                   </Button>
-                  <Button 
-                    onClick={handleSaveMarks}
-                    disabled={!hasValidMarks}
+                  <Button
+                    onClick={handleBulkUpload}
+                    disabled={isProcessing || !parsedMarks.some(m => m.status === 'valid') || isCreatingBulk}
+                    className="flex items-center gap-2"
                   >
-                    <CheckCircle className="h-4 w-4 mr-2" />
+                    {isCreatingBulk ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
                     {t('academicProgress.confirmAndSave')}
                   </Button>
                 </div>
               </CardContent>
             </Card>
           )}
-
-          {/* Term Summary */}
           {termSummary.length > 0 && (
             <Card>
               <CardHeader>
@@ -723,8 +783,8 @@ export default function SchoolAcademicProgress() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-2">
                   <Label>{t('academicProgress.class')}</Label>
-                  <Select 
-                    value={overviewFilterClass} 
+                  <Select
+                    value={overviewFilterClass}
                     onValueChange={(value) => {
                       setOverviewFilterClass(value);
                       handleFilterChange();
@@ -744,8 +804,8 @@ export default function SchoolAcademicProgress() {
 
                 <div className="space-y-2">
                   <Label>{t('academicProgress.subject')}</Label>
-                  <Select 
-                    value={overviewFilterSubject} 
+                  <Select
+                    value={overviewFilterSubject}
                     onValueChange={(value) => {
                       setOverviewFilterSubject(value);
                       handleFilterChange();
@@ -765,8 +825,8 @@ export default function SchoolAcademicProgress() {
 
                 <div className="space-y-2">
                   <Label>{t('academicProgress.term')}</Label>
-                  <Select 
-                    value={overviewFilterTerm} 
+                  <Select
+                    value={overviewFilterTerm}
                     onValueChange={(value) => {
                       setOverviewFilterTerm(value);
                       handleFilterChange();
@@ -794,10 +854,10 @@ export default function SchoolAcademicProgress() {
                 <div>
                   <CardTitle className="text-lg">{t('academicProgress.gradesOverview')}</CardTitle>
                   <CardDescription>
-                    {t('academicProgress.showingRecords', { 
-                      from: Math.min((currentPage - 1) * ITEMS_PER_PAGE + 1, filteredGrades.length),
-                      to: Math.min(currentPage * ITEMS_PER_PAGE, filteredGrades.length),
-                      total: filteredGrades.length 
+                    {t('academicProgress.showingRecords', {
+                      from: Math.min((currentPage - 1) * ITEMS_PER_PAGE + 1, displayedGrades.length),
+                      to: Math.min(currentPage * ITEMS_PER_PAGE, displayedGrades.length),
+                      total: displayedGrades.length
                     })}
                   </CardDescription>
                 </div>
@@ -816,7 +876,9 @@ export default function SchoolAcademicProgress() {
               </div>
             </CardHeader>
             <CardContent>
-              {filteredGrades.length === 0 ? (
+              {isLoadingGrades ? (
+                <div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
+              ) : displayedGrades.length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground">
                   {t('academicProgress.noGradesFound')}
                 </div>
@@ -831,91 +893,96 @@ export default function SchoolAcademicProgress() {
                           <TableHead>{t('academicProgress.class')}</TableHead>
                           <TableHead>{t('academicProgress.subject')}</TableHead>
                           <TableHead>{t('academicProgress.term')}</TableHead>
+                          <TableHead className="text-center">Assessment</TableHead>
                           <TableHead className="text-center">{t('academicProgress.mark')}</TableHead>
                           <TableHead className="text-center">{t('academicProgress.grade')}</TableHead>
-                          <TableHead className="text-center">{t('common.status')}</TableHead>
                           <TableHead className="text-right">{t('common.actions')}</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {paginatedGrades.map((record) => (
-                          <TableRow key={record.id}>
-                            <TableCell className="font-mono text-sm">{record.studentId}</TableCell>
-                            <TableCell>{record.studentName}</TableCell>
-                            <TableCell>{record.class}</TableCell>
-                            <TableCell>{record.subject}</TableCell>
-                            <TableCell>{record.term}</TableCell>
-                            <TableCell className="text-center">
-                              {editingId === record.id ? (
-                                <Input
-                                  type="number"
-                                  min="0"
-                                  max="100"
-                                  value={editingMark}
-                                  onChange={(e) => setEditingMark(e.target.value)}
-                                  className="w-20 text-center mx-auto"
-                                />
-                              ) : (
-                                <span className="font-medium">{record.mark}%</span>
-                              )}
-                            </TableCell>
-                            <TableCell className="text-center">
-                              <Badge variant="outline" className={cn(
-                                record.grade === 'A' && 'bg-green-500/10 text-green-600 border-green-200',
-                                record.grade === 'B' && 'bg-blue-500/10 text-blue-600 border-blue-200',
-                                record.grade === 'C' && 'bg-yellow-500/10 text-yellow-600 border-yellow-200',
-                                record.grade === 'D' && 'bg-orange-500/10 text-orange-600 border-orange-200',
-                                record.grade === 'F' && 'bg-destructive/10 text-destructive border-destructive/20',
-                              )}>
-                                {record.grade}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-center">
-                              <Badge variant={record.status === 'Pass' ? 'default' : 'destructive'}>
-                                {record.status === 'Pass' ? t('academicProgress.pass') : t('academicProgress.fail')}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <div className="flex items-center justify-end gap-1">
+                        {paginatedGrades.map((record: any) => {
+                          const achievedScore = record.achievedScore ?? record.mark;
+                          const maxScore = record.maxScore || 100;
+                          const percentage = Math.round((achievedScore / maxScore) * 100);
+                          const studentName = record.student?.fullName || record.studentName;
+                          const nationalId = record.student?.idNumber || record.studentId;
+                          const gradeChar = record.grade || (percentage >= 80 ? 'A' : percentage >= 70 ? 'B' : percentage >= 60 ? 'C' : percentage >= 50 ? 'D' : 'F');
+
+                          return (
+                            <TableRow key={record.id}>
+                              <TableCell className="font-mono text-sm">{nationalId || '—'}</TableCell>
+                              <TableCell className="font-medium">{studentName || 'Unknown Student'}</TableCell>
+                              <TableCell>{record.grade || record.class}</TableCell>
+                              <TableCell>{record.subject}</TableCell>
+                              <TableCell>{record.term}</TableCell>
+                              <TableCell className="text-center text-xs">{record.assessmentTitle || 'Final'}</TableCell>
+                              <TableCell className="text-center">
                                 {editingId === record.id ? (
-                                  <>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      onClick={() => handleSaveEdit(record.id)}
-                                    >
-                                      <Save className="h-4 w-4 text-green-600" />
-                                    </Button>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      onClick={handleCancelEdit}
-                                    >
-                                      <X className="h-4 w-4" />
-                                    </Button>
-                                  </>
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    max="100"
+                                    value={editingMark}
+                                    onChange={(e) => setEditingMark(e.target.value)}
+                                    className="w-20 text-center mx-auto"
+                                  />
                                 ) : (
-                                  <>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      onClick={() => handleEditGrade(record)}
-                                    >
-                                      <Pencil className="h-4 w-4" />
-                                    </Button>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      onClick={() => handleDeleteClick(record.id)}
-                                    >
-                                      <Trash2 className="h-4 w-4 text-destructive" />
-                                    </Button>
-                                  </>
+                                  <span className="font-medium">{percentage}%</span>
                                 )}
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        ))}
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <Badge variant="outline" className={cn(
+                                  gradeChar === 'A' && 'bg-green-500/10 text-green-600 border-green-200',
+                                  gradeChar === 'B' && 'bg-blue-500/10 text-blue-600 border-blue-200',
+                                  gradeChar === 'C' && 'bg-yellow-500/10 text-yellow-600 border-yellow-200',
+                                  gradeChar === 'D' && 'bg-orange-500/10 text-orange-600 border-orange-200',
+                                  gradeChar === 'F' && 'bg-destructive/10 text-destructive border-destructive/20',
+                                )}>
+                                  {gradeChar}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <div className="flex items-center justify-end gap-1">
+                                  {editingId === record.id ? (
+                                    <>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => handleSaveEdit(record.id)}
+                                      >
+                                        <Save className="h-4 w-4 text-green-600" />
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={handleCancelEdit}
+                                      >
+                                        <X className="h-4 w-4" />
+                                      </Button>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => handleEditGrade(record)}
+                                      >
+                                        <Pencil className="h-4 w-4" />
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => handleDeleteClick(record.id)}
+                                      >
+                                        <Trash2 className="h-4 w-4 text-destructive" />
+                                      </Button>
+                                    </>
+                                  )}
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
                       </TableBody>
                     </Table>
                   </div>
@@ -970,21 +1037,142 @@ export default function SchoolAcademicProgress() {
         </TabsContent>
       </Tabs>
 
-      {/* Delete Confirmation Dialog */}
-      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+      {/* Reason Dialog */}
+      <AlertDialog open={showReasonDialog} onOpenChange={setShowReasonDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>{t('academicProgress.confirmDelete')}</AlertDialogTitle>
+            <AlertDialogTitle>Enter Reason</AlertDialogTitle>
             <AlertDialogDescription>
-              {t('academicProgress.confirmDeleteDesc')}
+              Please provide a reason for this {pendingAction?.type === 'update' ? 'update' : 'deletion'}.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <div className="py-4">
+            <Label htmlFor="reason">Reason</Label>
+            <Input
+              id="reason"
+              value={actionReason}
+              onChange={(e) => setActionReason(e.target.value)}
+              placeholder="e.g., Data entry error"
+              className="mt-2"
+            />
+          </div>
           <AlertDialogFooter>
-            <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
-            <AlertDialogAction onClick={handleConfirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              {t('common.delete')}
+            <AlertDialogCancel onClick={() => {
+              setShowReasonDialog(false);
+              setActionReason('');
+              setPendingAction(null);
+            }}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmAction} disabled={!actionReason || isUpdating || isDeleting}>
+              {(isUpdating || isDeleting) ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Confirm
             </AlertDialogAction>
           </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Manual Add Dialog */}
+      <AlertDialog open={manualAddOpen} onOpenChange={setManualAddOpen}>
+        <AlertDialogContent className="sm:max-w-[500px]">
+          <form onSubmit={async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.currentTarget);
+            const data = {
+              studentId: formData.get('studentId') as string,
+              term: formData.get('term') as string,
+              date: formData.get('date') as string,
+              grade: formData.get('grade') as string,
+              subject: formData.get('subject') as string,
+              assessmentType: formData.get('assessmentType') as string,
+              assessmentTitle: formData.get('assessmentTitle') as string,
+              maxScore: Number(formData.get('maxScore')),
+              achievedScore: Number(formData.get('achievedScore')),
+            };
+            try {
+              await createRecord(data as any);
+              sonnerToast.success("Mark added successfully");
+              setManualAddOpen(false);
+            } catch (err) {
+              sonnerToast.error("Failed to add mark");
+            }
+          }}>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Add Mark Manually</AlertDialogTitle>
+              <AlertDialogDescription>
+                Fill in the details to add a student's academic record.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label className="text-right">Student ID (National ID)</Label>
+                <Input name="studentId" required className="col-span-3" placeholder="e.g., 9001015800081" />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label className="text-right">Date</Label>
+                <Input name="date" type="date" required className="col-span-3" />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label className="text-right">Term</Label>
+                <Select name="term" defaultValue="Term 1">
+                  <SelectTrigger className="col-span-3"><SelectValue placeholder="Select term" /></SelectTrigger>
+                  <SelectContent>
+                    {terms.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label className="text-right">Grade/Class</Label>
+                <Select name="grade" defaultValue={classes[0]}>
+                  <SelectTrigger className="col-span-3"><SelectValue placeholder="Select class" /></SelectTrigger>
+                  <SelectContent>
+                    {classes.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label className="text-right">Subject</Label>
+                <Select name="subject" defaultValue={subjects[0]}>
+                  <SelectTrigger className="col-span-3"><SelectValue placeholder="Select subject" /></SelectTrigger>
+                  <SelectContent>
+                    {subjects.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label className="text-right">Assessment Type</Label>
+                <Select name="assessmentType" defaultValue="EXAM">
+                  <SelectTrigger className="col-span-3"><SelectValue placeholder="Select type" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="EXAM">Exam</SelectItem>
+                    <SelectItem value="CONTROL_TEST">Control Test</SelectItem>
+                    <SelectItem value="HOMEWORK">Homework</SelectItem>
+                    <SelectItem value="QUIZ">Quiz</SelectItem>
+                    <SelectItem value="PRACTICAL">Practical</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label className="text-right">Assessment Title</Label>
+                <Input name="assessmentTitle" required className="col-span-3" placeholder="e.g., Algebra Midterm" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex flex-col gap-2">
+                  <Label>Achieved Mark</Label>
+                  <Input name="achievedScore" type="number" required placeholder="0" />
+                </div>
+                <div className="flex flex-col gap-2">
+                  <Label>Max Mark</Label>
+                  <Input name="maxScore" type="number" required placeholder="100" />
+                </div>
+              </div>
+            </div>
+            <AlertDialogFooter>
+              <AlertDialogCancel type="button">Cancel</AlertDialogCancel>
+              <Button type="submit" disabled={isCreating}>
+                {isCreating && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                Save Mark
+              </Button>
+            </AlertDialogFooter>
+          </form>
         </AlertDialogContent>
       </AlertDialog>
     </div>

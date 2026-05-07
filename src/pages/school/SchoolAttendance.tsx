@@ -1,6 +1,6 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Upload, FileSpreadsheet, CheckCircle, AlertCircle, X, Loader2, Search, Download, FileText, CalendarIcon } from 'lucide-react';
+import { Upload, FileSpreadsheet, CheckCircle, AlertCircle, X, Loader2, Search, Download, FileText, CalendarIcon, Pencil, Trash2, Save } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
-import { format, subDays, startOfMonth, endOfMonth, isWithinInterval, parseISO } from 'date-fns';
+import { format, subDays, startOfMonth, endOfMonth, isWithinInterval, parseISO, isAfter } from 'date-fns';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
@@ -23,94 +23,53 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from '@/components/ui/pagination';
-
-// Mock data for dropdowns
-const classes = ['Grade 5', 'Grade 6', 'Grade 7', 'Grade 8', 'Grade 9-A', 'Grade 9-B', 'Grade 10-A', 'Grade 10-B'];
-
-// Mock student data
-const mockClassStudents: Record<string, Array<{ id: string; name: string }>> = {
-  'Grade 5': [
-    { id: 'STU001', name: 'Emma Johnson' },
-    { id: 'STU002', name: 'Liam Smith' },
-    { id: 'STU003', name: 'Sophia Williams' },
-    { id: 'STU004', name: 'Noah Brown' },
-    { id: 'STU005', name: 'Olivia Davis' },
-  ],
-  'Grade 6': [
-    { id: 'STU006', name: 'James Wilson' },
-    { id: 'STU007', name: 'Ava Martinez' },
-    { id: 'STU008', name: 'William Anderson' },
-    { id: 'STU009', name: 'Isabella Thomas' },
-    { id: 'STU010', name: 'Benjamin Taylor' },
-  ],
-  'Grade 7': [
-    { id: 'STU011', name: 'Mia Jackson' },
-    { id: 'STU012', name: 'Lucas White' },
-    { id: 'STU013', name: 'Charlotte Harris' },
-    { id: 'STU014', name: 'Henry Martin' },
-  ],
-  'Grade 9-A': [
-    { id: 'STU015', name: 'Amelia Thompson' },
-    { id: 'STU016', name: 'Alexander Garcia' },
-    { id: 'STU017', name: 'Harper Robinson' },
-  ],
-  'Grade 10-A': [
-    { id: 'STU018', name: 'Ethan Clark' },
-    { id: 'STU019', name: 'Evelyn Rodriguez' },
-    { id: 'STU020', name: 'Michael Lewis' },
-    { id: 'STU021', name: 'Abigail Lee' },
-  ],
-};
+import { toast as sonnerToast } from 'sonner';
+import * as XLSX from 'xlsx';
+import { useAuth } from '@/context/AuthContext';
+import { useUserWithProfile } from '@/hooks/users/user.hook';
+import {
+  useAttendance,
+  useAttendanceSummary,
+  useBulkValidateAttendance,
+  useBulkCreateAttendance,
+  useUpdateAttendance,
+  useDeleteAttendance
+} from '@/hooks/attendance.hook';
+import { Skeleton } from '@/components/ui/skeleton';
 
 interface ParsedAttendance {
-  studentId: string;
-  studentName: string;
-  status: 'present' | 'absent' | null;
+  studentIdNumber: string;
+  names: string;
+  surname: string;
+  grade: string;
+  subject: string;
+  status: 'PRESENT' | 'ABSENT' | null;
+  date: string;
+  term: string;
+  capturedBy: string;
   validationStatus: 'valid' | 'invalid' | 'missing';
   errorMessage?: string;
 }
 
 interface AttendanceRecord {
-  id: number;
+  id: string;
   date: string;
   studentId: string;
   studentName: string;
-  class: string;
-  status: 'present' | 'absent';
+  idNumber?: string;
+  grade: string;
+  status: 'PRESENT' | 'ABSENT';
 }
-
-// Generate mock attendance records
-const generateMockAttendance = (): AttendanceRecord[] => {
-  const records: AttendanceRecord[] = [];
-  let id = 1;
-  const today = new Date();
-  
-  Object.entries(mockClassStudents).forEach(([className, students]) => {
-    students.forEach(student => {
-      // Generate attendance for last 30 days
-      for (let i = 0; i < 30; i++) {
-        const date = subDays(today, i);
-        if (date.getDay() !== 0 && date.getDay() !== 6) { // Skip weekends
-          records.push({
-            id: id++,
-            date: format(date, 'yyyy-MM-dd'),
-            studentId: student.id,
-            studentName: student.name,
-            class: className,
-            status: Math.random() > 0.15 ? 'present' : 'absent', // 85% attendance rate
-          });
-        }
-      }
-    });
-  });
-  
-  return records;
-};
 
 const ITEMS_PER_PAGE = 10;
 
 export default function SchoolAttendance() {
   const { t } = useTranslation();
+  const { user } = useAuth();
+  const { data: userProfile, isLoading: isLoadingProfile } = useUserWithProfile(user?.sub || '');
+  const schoolProfile = userProfile?.schoolAdminProfile?.school;
+  const offeredGrades = schoolProfile?.gradesOffered || [];
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Tab state
@@ -127,9 +86,6 @@ export default function SchoolAttendance() {
   const [parsedAttendance, setParsedAttendance] = useState<ParsedAttendance[]>([]);
   const [validationComplete, setValidationComplete] = useState(false);
 
-  // Attendance records state
-  const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>(() => generateMockAttendance());
-  
   // Filter state
   const [filterClass, setFilterClass] = useState('all');
   const [filterDateRange, setFilterDateRange] = useState('thisMonth');
@@ -142,76 +98,175 @@ export default function SchoolAttendance() {
   const [reportClass, setReportClass] = useState('all');
   const [reportMonth, setReportMonth] = useState(format(new Date(), 'yyyy-MM'));
 
+  // Hooks
+  const { data: realRecords, isLoading: isLoadingRecords } = useAttendance({
+    grade: activeTab === 'reports' 
+      ? (reportClass === 'all' ? undefined : reportClass)
+      : (filterClass === 'all' ? undefined : filterClass),
+    date: activeTab === 'upload' 
+      ? format(selectedDate || new Date(), 'yyyy-MM-dd')
+      : activeTab === 'records' && filterDateRange === 'today' 
+        ? format(new Date(), 'yyyy-MM-dd') 
+        : undefined,
+    startDate: activeTab === 'reports' 
+      ? format(startOfMonth(parseISO(`${reportMonth}-01`)), 'yyyy-MM-dd')
+      : undefined,
+    endDate: activeTab === 'reports' 
+      ? format(endOfMonth(parseISO(`${reportMonth}-01`)), 'yyyy-MM-dd')
+      : undefined,
+  });
+
+  const { data: summaryData } = useAttendanceSummary({
+    grade: activeTab === 'reports' 
+      ? (reportClass === 'all' ? undefined : reportClass)
+      : (filterClass === 'all' ? undefined : filterClass),
+    startDate: activeTab === 'reports' 
+      ? format(startOfMonth(parseISO(`${reportMonth}-01`)), 'yyyy-MM-dd')
+      : undefined,
+    endDate: activeTab === 'reports' 
+      ? format(endOfMonth(parseISO(`${reportMonth}-01`)), 'yyyy-MM-dd')
+      : undefined,
+  });
+
+  const { mutateAsync: validateBulk, isPending: isValidatingBulk } = useBulkValidateAttendance();
+  const { mutateAsync: createBulk, isPending: isCreatingBulk } = useBulkCreateAttendance();
+  const { mutateAsync: updateRecord } = useUpdateAttendance();
+  const { mutateAsync: deleteRecord } = useDeleteAttendance();
+
   const canUpload = selectedClass && selectedDate;
   const hasValidRecords = parsedAttendance.some(r => r.validationStatus === 'valid');
   const invalidCount = parsedAttendance.filter(r => r.validationStatus !== 'valid').length;
 
   // Filter attendance records
-  const getFilteredRecords = () => {
-    return attendanceRecords.filter(record => {
-      // Class filter
-      if (filterClass !== 'all' && record.class !== filterClass) return false;
-      
-      // Date range filter
-      const recordDate = parseISO(record.date);
-      const today = new Date();
-      
-      if (filterDateRange === 'today') {
-        if (format(recordDate, 'yyyy-MM-dd') !== format(today, 'yyyy-MM-dd')) return false;
-      } else if (filterDateRange === 'last7Days') {
-        const weekAgo = subDays(today, 7);
-        if (!isWithinInterval(recordDate, { start: weekAgo, end: today })) return false;
-      } else if (filterDateRange === 'thisMonth') {
-        const monthStart = startOfMonth(today);
-        const monthEnd = endOfMonth(today);
-        if (!isWithinInterval(recordDate, { start: monthStart, end: monthEnd })) return false;
-      } else if (filterDateRange === 'custom' && filterCustomFrom && filterCustomTo) {
-        if (!isWithinInterval(recordDate, { start: filterCustomFrom, end: filterCustomTo })) return false;
-      }
-      
+  const filteredRecords = useMemo(() => {
+    const dataToFilter = realRecords || [];
+    return dataToFilter.filter((record: any) => {
       // Search filter
-      if (searchQuery && !record.studentName.toLowerCase().includes(searchQuery.toLowerCase()) &&
-          !record.studentId.toLowerCase().includes(searchQuery.toLowerCase())) {
+      const studentName = record.student?.fullName || record.studentName || '';
+      const studentId = record.student?.idNumber || record.studentId || '';
+      if (searchQuery && !studentName.toLowerCase().includes(searchQuery.toLowerCase()) &&
+          !studentId.toLowerCase().includes(searchQuery.toLowerCase())) {
         return false;
       }
-      
       return true;
     });
-  };
+  }, [realRecords, searchQuery]);
 
-  const filteredRecords = getFilteredRecords();
   const totalPages = Math.ceil(filteredRecords.length / ITEMS_PER_PAGE);
-  const paginatedRecords = filteredRecords.slice(
-    (currentPage - 1) * ITEMS_PER_PAGE,
-    currentPage * ITEMS_PER_PAGE
-  );
+  const paginatedRecords = useMemo(() => {
+    return filteredRecords.slice(
+      (currentPage - 1) * ITEMS_PER_PAGE,
+      currentPage * ITEMS_PER_PAGE
+    );
+  }, [filteredRecords, currentPage]);
 
-  // Calculate statistics
-  const presentCount = filteredRecords.filter(r => r.status === 'present').length;
-  const absentCount = filteredRecords.filter(r => r.status === 'absent').length;
-  const attendanceRate = filteredRecords.length > 0 
-    ? Math.round((presentCount / filteredRecords.length) * 100) 
-    : 0;
+  // Calculate statistics from summaryData
+  const presentCount = summaryData?.presentCount || 0;
+  const absentCount = summaryData?.absentCount || 0;
+  const attendanceRate = summaryData?.attendanceRate || 0;
 
   // Get students with repeated absences
-  const getRepeatedAbsences = () => {
-    const absenceCounts: Record<string, { name: string; class: string; count: number }> = {};
+  const repeatedAbsences = useMemo(() => {
+    const data = realRecords || [];
+    const absencesByStudent: Record<string, { name: string; count: number; lastDate: string }> = {};
     
-    filteredRecords.forEach(record => {
-      if (record.status === 'absent') {
-        if (!absenceCounts[record.studentId]) {
-          absenceCounts[record.studentId] = { name: record.studentName, class: record.class, count: 0 };
-        }
-        absenceCounts[record.studentId].count++;
+    data.filter((r: any) => r.status === 'ABSENT').forEach((record: any) => {
+      const studentId = record.student?.idNumber || record.studentId;
+      if (!absencesByStudent[studentId]) {
+        absencesByStudent[studentId] = {
+          name: record.student?.fullName || record.studentName,
+          count: 0,
+          lastDate: record.date
+        };
+      }
+      absencesByStudent[studentId].count++;
+      if (isAfter(parseISO(record.date), parseISO(absencesByStudent[studentId].lastDate))) {
+        absencesByStudent[studentId].lastDate = record.date;
       }
     });
-    
-    return Object.entries(absenceCounts)
-      .filter(([_, data]) => data.count >= 3)
-      .sort((a, b) => b[1].count - a[1].count);
-  };
 
-  const repeatedAbsences = getRepeatedAbsences();
+    return Object.values(absencesByStudent).filter(s => s.count >= 3);
+  }, [realRecords]);
+
+  const reportStats = useMemo(() => {
+    const stats: Record<string, { name: string, grade: string, present: number, absent: number }> = {};
+    filteredRecords.forEach(r => {
+      const sid = r.student?.id || r.studentId;
+      if (!stats[sid]) stats[sid] = { name: r.student?.fullName || r.studentName, grade: r.grade, present: 0, absent: 0 };
+      if (r.status === 'PRESENT') stats[sid].present++;
+      else stats[sid].absent++;
+    });
+    return Object.values(stats);
+  }, [filteredRecords]);
+
+  if (isLoadingProfile) {
+    return (
+      <div className="space-y-6">
+        <Skeleton className="h-10 w-48" />
+        <Card>
+          <CardContent className="p-8 text-center">
+            <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto mb-4" />
+            <p className="text-muted-foreground">{t('common.loading')}</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  const handleDownloadTemplate = (fileFormat: 'csv' | 'xlsx') => {
+    const headers = [
+      'studentIdNumber',
+      'names',
+      'surname',
+      'grade',
+      'subject',
+      'status',
+      'date',
+      'term',
+      'capturedBy'
+    ];
+    
+    const sampleData = [
+      {
+        studentIdNumber: 'STU001',
+        names: 'John',
+        surname: 'Doe',
+        grade: selectedClass || 'Grade 10A',
+        subject: 'Mathematics',
+        status: 'PRESENT',
+        date: format(selectedDate || new Date(), 'yyyy-MM-dd'),
+        term: 'Term 1',
+        capturedBy: userProfile?.fullName || 'Teacher Name'
+      }
+    ];
+
+    if (fileFormat === 'xlsx') {
+      const ws = XLSX.utils.json_to_sheet(sampleData, { header: headers });
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Attendance Template');
+      XLSX.writeFile(wb, 'attendance_template.xlsx');
+    } else {
+      const csvContent = [
+        headers.join(','),
+        ...sampleData.map(row => Object.values(row).join(','))
+      ].join('\n');
+      
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', 'attendance_template.csv');
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    toast({
+      title: t('common.downloadStarted'),
+      description: t('attendance.templateDownloaded'),
+    });
+  };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -227,7 +282,7 @@ export default function SchoolAttendance() {
         setUploadedFile(file);
         setParsedAttendance([]);
         setValidationComplete(false);
-        simulateFileProcessing();
+        processFile(file);
       } else {
         toast({
           title: t('attendance.invalidFileType'),
@@ -238,86 +293,71 @@ export default function SchoolAttendance() {
     }
   };
 
-  const simulateFileProcessing = () => {
+  const processFile = (file: File) => {
     setIsProcessing(true);
     setProcessingProgress(0);
 
-    const progressInterval = setInterval(() => {
-      setProcessingProgress(prev => {
-        if (prev >= 100) {
-          clearInterval(progressInterval);
-          return 100;
-        }
-        return prev + 10;
-      });
-    }, 150);
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const data = e.target?.result;
+      const workbook = XLSX.read(data, { type: 'binary' });
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      const rawJson = XLSX.utils.sheet_to_json(worksheet) as any[];
 
-    setTimeout(() => {
-      clearInterval(progressInterval);
-      setProcessingProgress(100);
-      
-      const students = mockClassStudents[selectedClass] || [];
-      const mockParsedData: ParsedAttendance[] = students.map((student, index) => {
-        if (index === 0) {
-          return {
-            studentId: student.id,
-            studentName: student.name,
-            status: 'present' as const,
-            validationStatus: 'valid' as const,
-          };
-        } else if (index === 1 && students.length > 2) {
-          return {
-            studentId: student.id,
-            studentName: student.name,
-            status: null,
-            validationStatus: 'missing' as const,
-            errorMessage: t('attendance.statusMissing'),
-          };
-        } else {
-          return {
-            studentId: student.id,
-            studentName: student.name,
-            status: Math.random() > 0.2 ? 'present' : 'absent',
-            validationStatus: 'valid' as const,
-          };
-        }
+      // Filter out completely empty rows
+      const filteredJson = rawJson.filter(row =>
+        Object.values(row).some(val => val !== null && val !== undefined && val !== '')
+      );
+
+      const mappedRecords = filteredJson.map(row => {
+        const statusRaw = (row.status || row.present_or_absent || row['Status'] || 'PRESENT').toString().toUpperCase();
+        const status = (statusRaw === 'PRESENT' || statusRaw === 'ABSENT') ? statusRaw : 'PRESENT';
+        
+        return {
+          studentIdNumber: (row.studentIdNumber || row.idNumber || row['Student ID Number'] || row['Student ID'])?.toString(),
+          names: row.names || row.firstName || row['Names'] || row['First Name'],
+          surname: row.surname || row.lastName || row['Surname'] || row['Last Name'],
+          status: status,
+          date: row.date || row['Date'] || format(selectedDate!, 'yyyy-MM-dd'),
+          grade: row.grade || row.class || row['Grade'] || row['Class'] || selectedClass,
+          period: row.period || row['Period'] || '1',
+          subject: row.subject || row['Subject'] || 'General',
+          term: row.term || row['Term'] || 'Term 1',
+          capturedBy: row.capturedBy || row['Captured By'] || userProfile?.fullName || '',
+          remarks: row.remarks || row['Remarks'],
+        };
       });
 
-      // Add an unknown student
-      mockParsedData.push({
-        studentId: 'UNKNOWN001',
-        studentName: 'Unknown Student',
-        status: 'present',
-        validationStatus: 'invalid' as const,
-        errorMessage: t('attendance.studentNotFound'),
-      });
+      setProcessingProgress(50);
 
-      setParsedAttendance(mockParsedData);
-      setIsProcessing(false);
-      setValidationComplete(true);
-    }, 1800);
+      try {
+        const validated = await validateBulk(mappedRecords);
+        setParsedAttendance(validated);
+        setProcessingProgress(100);
+        setValidationComplete(true);
+      } catch (error) {
+        sonnerToast.error("Failed to validate file");
+      } finally {
+        setIsProcessing(false);
+      }
+    };
+    reader.readAsBinaryString(file);
   };
 
-  const handleSaveAttendance = () => {
+  const handleSaveAttendance = async () => {
     const validRecords = parsedAttendance.filter(r => r.validationStatus === 'valid' && r.status !== null);
     
-    const newRecords: AttendanceRecord[] = validRecords.map((record, index) => ({
-      id: Date.now() + index,
-      date: format(selectedDate!, 'yyyy-MM-dd'),
-      studentId: record.studentId,
-      studentName: record.studentName,
-      class: selectedClass,
-      status: record.status as 'present' | 'absent',
-    }));
-
-    setAttendanceRecords(prev => [...newRecords, ...prev]);
-
-    toast({
-      title: t('attendance.attendanceImported'),
-      description: t('attendance.attendanceImportedDesc', { count: validRecords.length }),
-    });
-
-    handleReset();
+    try {
+      await createBulk(validRecords);
+      toast({
+        title: t('attendance.attendanceImported'),
+        description: t('attendance.attendanceImportedDesc', { count: validRecords.length }),
+      });
+      handleReset();
+    } catch (error) {
+      sonnerToast.error("Failed to save attendance");
+    }
   };
 
   const handleReset = () => {
@@ -351,14 +391,15 @@ export default function SchoolAttendance() {
   };
 
   const handleGenerateReport = () => {
-    // Filter records for the selected class and month
     const [year, month] = reportMonth.split('-').map(Number);
     const monthStart = new Date(year, month - 1, 1);
     const monthEnd = new Date(year, month, 0);
     
-    const reportRecords = attendanceRecords.filter(record => {
+    // We'll use the data from the realRecords but filter it for the report specific criteria
+    // In a real app, you might want to fetch this specifically
+    const reportRecords = (realRecords || []).filter((record: any) => {
       const recordDate = parseISO(record.date);
-      const classMatch = reportClass === 'all' || record.class === reportClass;
+      const classMatch = reportClass === 'all' || (record.class || record.grade) === reportClass;
       const dateMatch = isWithinInterval(recordDate, { start: monthStart, end: monthEnd });
       return classMatch && dateMatch;
     });
@@ -366,26 +407,27 @@ export default function SchoolAttendance() {
     // Calculate statistics per student
     const studentStats: Record<string, { name: string; class: string; present: number; absent: number; total: number }> = {};
     
-    reportRecords.forEach(record => {
-      if (!studentStats[record.studentId]) {
-        studentStats[record.studentId] = {
-          name: record.studentName,
-          class: record.class,
+    reportRecords.forEach((record: any) => {
+      const studentId = record.student?.idNumber || record.studentId;
+      if (!studentStats[studentId]) {
+        studentStats[studentId] = {
+          name: record.student?.fullName || record.studentName,
+          class: record.grade || record.class,
           present: 0,
           absent: 0,
           total: 0,
         };
       }
-      studentStats[record.studentId].total++;
-      if (record.status === 'present') {
-        studentStats[record.studentId].present++;
+      studentStats[studentId].total++;
+      if (record.status === 'PRESENT') {
+        studentStats[studentId].present++;
       } else {
-        studentStats[record.studentId].absent++;
+        studentStats[studentId].absent++;
       }
     });
 
-    const totalPresent = reportRecords.filter(r => r.status === 'present').length;
-    const totalAbsent = reportRecords.filter(r => r.status === 'absent').length;
+    const totalPresent = reportRecords.filter((r: any) => r.status === 'PRESENT').length;
+    const totalAbsent = reportRecords.filter((r: any) => r.status === 'ABSENT').length;
     const overallRate = reportRecords.length > 0 ? Math.round((totalPresent / reportRecords.length) * 100) : 0;
     const monthName = format(monthStart, 'MMMM yyyy');
 
@@ -532,7 +574,7 @@ export default function SchoolAttendance() {
                       <SelectValue placeholder={t('attendance.selectClass')} />
                     </SelectTrigger>
                     <SelectContent>
-                      {classes.map(cls => (
+                      {offeredGrades.map(cls => (
                         <SelectItem key={cls} value={cls}>{cls}</SelectItem>
                       ))}
                     </SelectContent>
@@ -565,6 +607,27 @@ export default function SchoolAttendance() {
                     </PopoverContent>
                   </Popover>
                 </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2 mt-4">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => handleDownloadTemplate('csv')}
+                  className="flex items-center gap-2"
+                >
+                  <Download className="h-4 w-4" />
+                  {t('attendance.downloadCSVTemplate')}
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => handleDownloadTemplate('xlsx')}
+                  className="flex items-center gap-2"
+                >
+                  <FileSpreadsheet className="h-4 w-4" />
+                  {t('attendance.downloadExcelTemplate')}
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -657,6 +720,8 @@ export default function SchoolAttendance() {
                       <TableRow>
                         <TableHead>{t('attendance.studentId')}</TableHead>
                         <TableHead>{t('attendance.studentName')}</TableHead>
+                        <TableHead>{t('attendance.class')}</TableHead>
+                        <TableHead>{t('attendance.subject')}</TableHead>
                         <TableHead>{t('attendance.status')}</TableHead>
                         <TableHead>{t('attendance.validation')}</TableHead>
                       </TableRow>
@@ -664,40 +729,37 @@ export default function SchoolAttendance() {
                     <TableBody>
                       {parsedAttendance.map((record, index) => (
                         <TableRow key={index} className={record.validationStatus !== 'valid' ? 'bg-destructive/10' : ''}>
-                          <TableCell className="font-mono text-sm">{record.studentId}</TableCell>
-                          <TableCell>{record.studentName}</TableCell>
+                          <TableCell className="font-mono text-xs">{record.studentIdNumber}</TableCell>
+                          <TableCell>{record.names} {record.surname}</TableCell>
+                          <TableCell className="text-xs">{record.grade}</TableCell>
+                          <TableCell className="text-xs">{record.subject}</TableCell>
                           <TableCell>
-                            {record.status === 'present' && (
-                              <Badge variant="default" className="bg-green-500 hover:bg-green-600">
-                                {t('attendance.present')}
-                              </Badge>
-                            )}
-                            {record.status === 'absent' && (
-                              <Badge variant="destructive">
-                                {t('attendance.absent')}
-                              </Badge>
-                            )}
-                            {record.status === null && (
-                              <span className="text-muted-foreground">-</span>
-                            )}
+                            <Badge 
+                              variant={record.status === 'PRESENT' ? 'success' : record.status === 'ABSENT' ? 'destructive' : 'outline'} 
+                              className="text-[10px]"
+                            >
+                              {record.status === 'PRESENT' || record.status === 'ABSENT' 
+                                ? t(`attendance.${record.status.toLowerCase()}`) 
+                                : record.status}
+                            </Badge>
                           </TableCell>
                           <TableCell>
                             {record.validationStatus === 'valid' && (
                               <div className="flex items-center gap-1 text-green-600">
                                 <CheckCircle className="h-4 w-4" />
-                                <span className="text-sm">{t('attendance.valid')}</span>
+                                <span className="text-xs">{t('attendance.valid')}</span>
                               </div>
                             )}
                             {record.validationStatus === 'invalid' && (
                               <div className="flex items-center gap-1 text-destructive">
                                 <AlertCircle className="h-4 w-4" />
-                                <span className="text-sm">{record.errorMessage}</span>
+                                <span className="text-xs">{record.errorMessage}</span>
                               </div>
                             )}
                             {record.validationStatus === 'missing' && (
                               <div className="flex items-center gap-1 text-yellow-600">
                                 <AlertCircle className="h-4 w-4" />
-                                <span className="text-sm">{record.errorMessage}</span>
+                                <span className="text-xs">{record.errorMessage}</span>
                               </div>
                             )}
                           </TableCell>
@@ -759,7 +821,7 @@ export default function SchoolAttendance() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">{t('attendance.allClasses')}</SelectItem>
-                      {classes.map(cls => (
+                      {offeredGrades.map(cls => (
                         <SelectItem key={cls} value={cls}>{cls}</SelectItem>
                       ))}
                     </SelectContent>
@@ -868,23 +930,33 @@ export default function SchoolAttendance() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {paginatedRecords.length === 0 ? (
+                    {isLoadingRecords ? (
+                      Array.from({ length: 5 }).map((_, i) => (
+                        <TableRow key={i}>
+                          <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                          <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                          <TableCell><Skeleton className="h-4 w-40" /></TableCell>
+                          <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                          <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                        </TableRow>
+                      ))
+                    ) : paginatedRecords.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
                           {t('attendance.noRecordsFound')}
                         </TableCell>
                       </TableRow>
                     ) : (
-                      paginatedRecords.map((record) => (
+                      paginatedRecords.map((record: any) => (
                         <TableRow key={record.id}>
                           <TableCell>{format(parseISO(record.date), 'PP')}</TableCell>
-                          <TableCell className="font-mono text-sm">{record.studentId}</TableCell>
-                          <TableCell>{record.studentName}</TableCell>
-                          <TableCell>{record.class}</TableCell>
+                          <TableCell className="font-mono text-sm">{record.student?.idNumber || record.studentId}</TableCell>
+                          <TableCell>{record.student?.fullName || record.studentName}</TableCell>
+                          <TableCell>{record.grade}</TableCell>
                           <TableCell>
-                            <Badge variant={record.status === 'present' ? 'default' : 'destructive'}
-                              className={record.status === 'present' ? 'bg-green-500 hover:bg-green-600' : ''}>
-                              {record.status === 'present' ? t('attendance.present') : t('attendance.absent')}
+                            <Badge variant={record.status === 'PRESENT' ? 'default' : 'destructive'}
+                              className={record.status === 'PRESENT' ? 'bg-green-500 hover:bg-green-600' : ''}>
+                              {record.status === 'PRESENT' ? t('attendance.present') : t('attendance.absent')}
                             </Badge>
                           </TableCell>
                         </TableRow>
@@ -952,13 +1024,13 @@ export default function SchoolAttendance() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {repeatedAbsences.map(([id, data]) => (
-                        <TableRow key={id}>
+                      {repeatedAbsences.map((data, index) => (
+                        <TableRow key={index}>
                           <TableCell>{data.name}</TableCell>
-                          <TableCell>{data.class}</TableCell>
                           <TableCell>
                             <Badge variant="destructive">{data.count} {t('attendance.days')}</Badge>
                           </TableCell>
+                          <TableCell className="text-muted-foreground text-xs">{format(parseISO(data.lastDate), 'PP')}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -986,7 +1058,7 @@ export default function SchoolAttendance() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">{t('attendance.allClasses')}</SelectItem>
-                      {classes.map(cls => (
+                      {offeredGrades.map(cls => (
                         <SelectItem key={cls} value={cls}>{cls}</SelectItem>
                       ))}
                     </SelectContent>
@@ -1016,21 +1088,21 @@ export default function SchoolAttendance() {
           <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
             <Card>
               <CardContent className="pt-6">
-                <div className="text-2xl font-bold">{attendanceRecords.length}</div>
+                <div className="text-2xl font-bold">{realRecords?.length || 0}</div>
                 <p className="text-xs text-muted-foreground">{t('attendance.totalRecords')}</p>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="pt-6">
                 <div className="text-2xl font-bold text-green-600">
-                  {Math.round((attendanceRecords.filter(r => r.status === 'present').length / attendanceRecords.length) * 100)}%
+                  {attendanceRate}%
                 </div>
                 <p className="text-xs text-muted-foreground">{t('attendance.overallAttendance')}</p>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="pt-6">
-                <div className="text-2xl font-bold">{Object.keys(mockClassStudents).length}</div>
+                <div className="text-2xl font-bold">{offeredGrades.length}</div>
                 <p className="text-xs text-muted-foreground">{t('attendance.classesTracked')}</p>
               </CardContent>
             </Card>
@@ -1041,6 +1113,48 @@ export default function SchoolAttendance() {
               </CardContent>
             </Card>
           </div>
+
+          {/* Report Preview / Summary Table */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">{t('attendance.reportPreview')}</CardTitle>
+              <CardDescription>{t('attendance.reportPreviewDesc', { month: reportMonth })}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>{t('attendance.studentName')}</TableHead>
+                      <TableHead>{t('attendance.class')}</TableHead>
+                      <TableHead>{t('attendance.present')}</TableHead>
+                      <TableHead>{t('attendance.absent')}</TableHead>
+                      <TableHead>{t('attendance.attendanceRate')}</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {isLoadingRecords ? (
+                      <TableRow><TableCell colSpan={5} className="text-center py-4"><Loader2 className="h-4 w-4 animate-spin mx-auto" /></TableCell></TableRow>
+                    ) : filteredRecords.length === 0 ? (
+                      <TableRow><TableCell colSpan={5} className="text-center py-4 text-muted-foreground">{t('attendance.noRecordsForMonth')}</TableCell></TableRow>
+                    ) : (
+                      reportStats.map((s, i) => (
+                        <TableRow key={i}>
+                          <TableCell>{s.name}</TableCell>
+                          <TableCell className="text-xs">{s.grade}</TableCell>
+                          <TableCell className="text-green-600 font-medium">{s.present}</TableCell>
+                          <TableCell className="text-destructive font-medium">{s.absent}</TableCell>
+                          <TableCell>
+                            {Math.round((s.present / (s.present + s.absent)) * 100)}%
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>

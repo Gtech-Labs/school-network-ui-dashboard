@@ -18,11 +18,27 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {toast} from 'sonner';
+import {SchoolPayload} from "@/pages/interfaces/school.interface.ts";
+import {useApiMutation} from "@/hooks/use-api-mutation.ts";
+import {useQueryClient} from "@tanstack/react-query";
+import {useAuth} from "@/context/AuthContext.tsx";
 
 export default function AdminSchools() {
     const navigate = useNavigate();
     const [searchQuery, setSearchQuery] = useState('');
     const [addDialogOpen, setAddDialogOpen] = useState(false);
+    const [step, setStep] = useState(1);
+    const [formData, setFormData] = useState({});
+    const {mutate, isPending, error : createSchoolError} = useApiMutation<never>();
+    const queryClient = useQueryClient();
+    const {user} = useAuth();
+
+    const handleNext = (e: React.FormEvent<HTMLFormElement>) => {
+        e.preventDefault();
+        const data = Object.fromEntries(new FormData(e.currentTarget));
+        setFormData((prev) => ({ ...prev, ...data }));
+        setStep(2);
+    };
 
     const {data: schools, isLoading, isError, error} = useApiQuery<never[]>(
         ['schools'],
@@ -38,10 +54,50 @@ export default function AdminSchools() {
         school?.email?.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
-    const handleAddSchool = (e: React.FormEvent<HTMLFormElement>) => {
+    const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
-        const formData = new FormData(e.currentTarget);
-        toast.success(`School ${formData.get('name')} added successfully`);
+        const step2Data = Object.fromEntries(new FormData(e.currentTarget));
+        const finalData : SchoolPayload = { ...formData, ...step2Data };
+
+        // Transform into Swagger-Compliant DTO
+        const payload  = {
+            name: finalData.name,
+            address: finalData.address,
+            province: finalData.province,
+            createdById : user?.sub,
+            municipality: finalData.municipality,
+            type: finalData.type,
+            tenant_id: finalData.tenant_id,
+            contactNumber: finalData.contactNumber,
+            email: finalData.email,
+            website: finalData.website,
+            annualFees: Number(finalData.annualFees),
+            admissionRequirements: finalData.admissionRequirements,
+            passRate: parseFloat(String(finalData.passRate)),
+            imageUrl: finalData.imageUrl || "https://cdn.example.com/school.jpg",
+            phase: (finalData.phase as unknown as string).split(',').map(s => s.trim()),
+            gradesOffered: (finalData.gradesOffered as unknown as string).split(',').map(s => s.trim()),
+            facilities: (finalData.facilities as unknown as string).split(',').map(s => s.trim()),
+            subjects: (finalData.subjects as unknown as string).split(',').map(item => {
+                const [name, code] = item.split(':');
+                return { name: name?.trim(), code: code?.trim() };
+            }),
+        };
+
+        //call mutation
+        mutate({method: 'POST', endpoint: `schools`, data: payload}, {
+            onSuccess: () => {
+                queryClient.invalidateQueries({queryKey: ['schools']}).then(r => console.log('invalidated'));
+                toast.success(`${payload.name} successfully created`);
+                //handleCloseDialog();
+            },
+            onError: (err) => {
+                toast.error("Failed to update school");
+                console.error(err);
+            }
+        });
+        console.log('API Payload:', JSON.stringify(payload, null, 2));
+        toast.success("School added successfully");
         setAddDialogOpen(false);
     };
 
@@ -68,90 +124,47 @@ export default function AdminSchools() {
                             <DialogHeader>
                                 <DialogTitle>Add New School</DialogTitle>
                             </DialogHeader>
-                            <form onSubmit={handleAddSchool} className="space-y-6">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div className="space-y-2">
-                                        <Label htmlFor="name">School Name *</Label>
-                                        <Input id="name" name="name" placeholder="Enter school name" required/>
-                                    </div>
-                                    <div className="space-y-2">
-                                        <Label htmlFor="email">School Email *</Label>
-                                        <Input id="email" name="email" type="email" placeholder="school@example.com"
-                                               required/>
-                                    </div>
-                                </div>
-
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div className="space-y-2">
-                                        <Label htmlFor="phone">Phone Number *</Label>
-                                        <Input id="phone" name="phone" type="tel" placeholder="+1 (555) 000-0000"
-                                               required/>
-                                    </div>
-                                    <div className="space-y-2">
-                                        <Label htmlFor="website">Website</Label>
-                                        <Input id="website" name="website" type="url"
-                                               placeholder="https://www.school.com"/>
-                                    </div>
-                                </div>
-
-                                <div className="space-y-2">
-                                    <Label htmlFor="address">Full Address *</Label>
-                                    <Textarea
-                                        id="address"
-                                        name="address"
-                                        placeholder="Enter complete school address including city, state, and postal code"
-                                        className="min-h-[80px]"
-                                        required
-                                    />
-                                </div>
-
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div className="space-y-2">
-                                        <Label htmlFor="logo">School Logo</Label>
-                                        <div className="flex items-center gap-2">
-                                            <Input
-                                                id="logo"
-                                                name="logo"
-                                                type="file"
-                                                accept="image/*"
-                                                className="cursor-pointer"
-                                            />
+                            <form onSubmit={step === 1 ? handleNext : handleSubmit} className="space-y-6">
+                                {step === 1 ? (
+                                    <div className="space-y-4">
+                                        <h3 className="text-lg font-medium">Step 1: Identity & Location</h3>
+                                        <Input name="name" placeholder="School Name" required defaultValue={formData.name} />
+                                        <Input name="email" type="email" placeholder="Email" required defaultValue={formData.email} />
+                                        <Input name="address" placeholder="Full Address" defaultValue={formData.address} />
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <Input name="province" placeholder="Province" defaultValue={formData.province} />
+                                            <Input name="municipality" placeholder="Municipality" defaultValue={formData.municipality} />
                                         </div>
-                                        <p className="text-xs text-muted-foreground">Upload school logo (PNG, JPG, max
-                                            2MB)</p>
+                                        <Input
+                                            id="tenant_id"
+                                            name="tenant_id"
+                                            placeholder="Enter Tenant ID"
+                                            required
+                                            defaultValue={formData.tenant_id}
+                                        />
+                                        <Input name="contactNumber" placeholder="Contact Number" defaultValue={formData.contactNumber} />
+                                        <Button type="submit" className="w-full">Next</Button>
                                     </div>
-                                    <div className="space-y-2">
-                                        <Label htmlFor="banner">School Banner</Label>
-                                        <div className="flex items-center gap-2">
-                                            <Input
-                                                id="banner"
-                                                name="banner"
-                                                type="file"
-                                                accept="image/*"
-                                                className="cursor-pointer"
-                                            />
+                                ) : (
+                                    <div className="space-y-4">
+                                        <h3 className="text-lg font-medium">Step 2: Operations & Academic</h3>
+                                        <div className="grid grid-cols-3 gap-4">
+                                            <Input name="type" placeholder="Type" defaultValue={formData.type} />
+                                            <Input name="annualFees" type="number" placeholder="Annual Fees" defaultValue={formData.annualFees} />
+                                            <Input name="passRate" type="number" step="0.1" placeholder="Pass Rate %" defaultValue={formData.passRate} />
                                         </div>
-                                        <p className="text-xs text-muted-foreground">Upload school banner (PNG, JPG, max
-                                            5MB)</p>
+                                        <Input name="website" type="url" placeholder="Website" defaultValue={formData.website} />
+                                        <Input name="phase" placeholder="Phases (e.g. Creche, Primary)" defaultValue={formData.phase} />
+                                        <Input name="gradesOffered" placeholder="Grades (e.g. R, 1, 2)" defaultValue={formData.gradesOffered} />
+                                        <Input name="facilities" placeholder="Facilities (e.g. Library, Field)" defaultValue={formData.facilities} />
+                                        <Input name="subjects" placeholder="Subjects (e.g. Math:MATH101)" defaultValue={formData.subjects} />
+                                        <Textarea name="admissionRequirements" placeholder="Admission Requirements" defaultValue={formData.admissionRequirements} />
+                                        <div className="flex gap-2">
+                                            <Button type="button" variant="outline" onClick={() => setStep(1)} className="w-full">Back</Button>
+                                            <Button type="submit" className="w-full" disabled={isPending}>{isPending ? 'Submitting ...' : 'Submit'}</Button>
+                                        </div>
                                     </div>
-                                </div>
-
-                                <div className="space-y-2">
-                                    <Label htmlFor="passrate">Pass Rate (%)</Label>
-                                    <Input
-                                        id="passrate"
-                                        name="passrate"
-                                        type="number"
-                                        min="0"
-                                        max="100"
-                                        step="0.1"
-                                        placeholder="e.g., 85.5"
-                                    />
-                                    <p className="text-xs text-muted-foreground">Enter the school's overall pass rate
-                                        percentage</p>
-                                </div>
-
-                                <Button type="submit" className="w-full">Add School</Button>
+                                )}
                             </form>
                         </DialogContent>
                     </Dialog>
