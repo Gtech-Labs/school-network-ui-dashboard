@@ -30,7 +30,7 @@ export default function SchoolAnnouncements() {
 
   const { data: announcementsData, isLoading } = useAnnouncements(schoolId);
   const announcements = announcementsData?.data || [];
-  
+
   const { data: stats } = useAnnouncementStats(schoolId);
   const { mutate: createAnnouncement, isPending } = useCreateAnnouncement();
 
@@ -55,7 +55,7 @@ export default function SchoolAnnouncements() {
       if (selectedGrades.length === 0) return recipientType;
       return `${recipientType} of ${selectedGrades.join(', ')}`;
     }
-    
+
     const audienceMap: Record<string, string> = {
       'all': 'All (Students, Parents, Teachers)',
       'parents': 'All Parents',
@@ -297,7 +297,7 @@ export default function SchoolAnnouncements() {
                   <div className="flex items-center justify-between text-xs text-muted-foreground">
                     <span className="flex items-center gap-1">
                       <Users className="h-3 w-3" />
-                      {announcement.targetRoles?.join(', ') || 'All'} 
+                      {announcement.targetRoles?.join(', ') || 'All'}
                       {announcement.targetGrades ? ` (${announcement.targetGrades.join(', ')})` : ''}
                     </span>
                     <span className="flex items-center gap-1">
