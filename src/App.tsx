@@ -50,6 +50,7 @@ const SchoolCalendar = lazy(() => import("./pages/school/SchoolCalendar"));
 const ParentDetail = lazy(() => import("./pages/school/ParentDetail"));
 const SchoolAcademicProgress = lazy(() => import("./pages/school/SchoolAcademicProgress"));
 const SchoolAttendance = lazy(() => import("./pages/school/SchoolAttendance"));
+const SchoolSettings = lazy(() => import("./pages/school/SchoolSettings"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 const PageLoader = () => (
@@ -94,6 +95,13 @@ const App = () => (
                     <Route path="email-templates" element={<AdminEmailTemplates />} />
                     <Route path="activity-log" element={<AdminActivityLog />} />
                     <Route path="support" element={<AdminSupport />} />
+                    <Route path="settings" element={<AdminSettings />} />
+                    <Route path="analytics" element={<AdminAnalytics />} />
+                    <Route path="security" element={<AdminSecurity />} />
+                    <Route path="permissions" element={<AdminPermissions />} />
+                    <Route path="integrations" element={<AdminIntegrations />} />
+                    <Route path="database" element={<AdminDatabase />} />
+                    <Route path="localization" element={<AdminLocalization />} />
                   </Route>
 
                   <Route path="/school" element={<DashboardLayout role="school" />}>
@@ -114,6 +122,7 @@ const App = () => (
                     <Route path="calendar" element={<SchoolCalendar />} />
                     <Route path="academic-progress" element={<SchoolAcademicProgress />} />
                     <Route path="attendance" element={<SchoolAttendance />} />
+                    <Route path="settings" element={<SchoolSettings />} />
                   </Route>
                 </Route>
 

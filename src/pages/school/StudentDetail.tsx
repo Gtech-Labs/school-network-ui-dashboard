@@ -21,6 +21,8 @@ import {useApiQuery} from "@/hooks/use-api-query.ts";
 import {useApiMutation} from "@/hooks/use-api-mutation.ts";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Loader2 } from "lucide-react";
+import { useInvoiceTotals } from "@/hooks/finance.hook";
+import { formatCurrency } from "@/lib/currency";
 
 
 export default function StudentDetail() {
@@ -32,6 +34,8 @@ export default function StudentDetail() {
       `/students/${id}`,
       { enabled: !!id }
   );
+  const { data: totalsData } = useInvoiceTotals({ studentProfileId: id || '' });
+  
   const student = studentResponse?.user;
   console.log("student", id)
 
@@ -701,14 +705,18 @@ export default function StudentDetail() {
                   <div className="p-4 border-b md:border-r">
                     <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Payment Status</label>
                     <div className="mt-1">
-                      <Badge variant={student.feesPaid === 100 ? 'default' : 'secondary'}>
-                        {student.feesPaid}% Paid
+                      <Badge variant={totalsData && totalsData.totalRevenue > 0 && totalsData.totalPaid === totalsData.totalRevenue ? 'default' : 'secondary'}>
+                        {totalsData && totalsData.totalRevenue > 0 
+                          ? `${Math.round((totalsData.totalPaid / totalsData.totalRevenue) * 100)}% Paid` 
+                          : '0% Paid'}
                       </Badge>
                     </div>
                   </div>
                   <div className="p-4 border-b">
                     <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Outstanding Balance</label>
-                    <p className="text-base mt-1 text-muted-foreground italic">Not provided</p>
+                    <p className="text-base mt-1 font-medium text-warning">
+                      {totalsData ? formatCurrency(totalsData.totalUnpaid) : 'R 0.00'}
+                    </p>
                   </div>
                   <div className="p-4 md:border-r">
                     <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Discounts</label>
