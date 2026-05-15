@@ -52,6 +52,7 @@ const SchoolAcademicProgress = lazy(() => import("./pages/school/SchoolAcademicP
 const SchoolAttendance = lazy(() => import("./pages/school/SchoolAttendance"));
 const SchoolSettings = lazy(() => import("./pages/school/SchoolSettings"));
 const NotFound = lazy(() => import("./pages/NotFound"));
+const GradesEntry = lazy(() => import("./pages/school/GradesEntry"));
 
 const PageLoader = () => (
   <div className="p-8 space-y-4">
@@ -76,6 +77,9 @@ const App = () => (
                 <Route element={<PublicRoute />}>
                   <Route path="/" element={<Login />} />
                 </Route>
+
+                {/* MAGIC LINK ROUTES: Accessible without standard login */}
+                <Route path="/grades/entry" element={<GradesEntry />} />
 
                 {/* PROTECTED ROUTES: Only accessible if logged in */}
                 <Route element={<ProtectedRoute />}>

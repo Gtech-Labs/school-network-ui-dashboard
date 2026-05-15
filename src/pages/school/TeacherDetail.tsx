@@ -208,11 +208,19 @@ export default function TeacherDetail() {
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                            {isDeleting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                            Delete Permanently
-                        </AlertDialogAction>
+                        <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+                        <Button 
+                            variant="destructive" 
+                            onClick={(e) => {
+                                e.preventDefault();
+                                handleDelete();
+                            }} 
+                            disabled={isDeleting}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                            {isDeleting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trash2 className="h-4 w-4 mr-2" />}
+                            {isDeleting ? "Deleting..." : "Delete Permanently"}
+                        </Button>
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
