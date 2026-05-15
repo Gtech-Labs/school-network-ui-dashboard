@@ -8,8 +8,15 @@ import {Input} from '@/components/ui/input';
 import {Label} from '@/components/ui/label';
 import {Textarea} from '@/components/ui/textarea';
 import {Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger} from '@/components/ui/dialog';
-import {Search, MoreVertical, Plus, Upload} from 'lucide-react';
+import {Search, MoreVertical, Plus, Upload, School, MapPin, BookOpen, ChevronRight, ChevronLeft, CheckCircle2, ChevronDown} from 'lucide-react';
 import {useApiQuery} from "@/hooks/use-api-query.ts";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
 
 import {
     DropdownMenu,
@@ -35,12 +42,18 @@ export default function AdminSchools() {
 
     const handleNext = (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
-        const data = Object.fromEntries(new FormData(e.currentTarget));
+        const formDataObj = new FormData(e.currentTarget);
+        const data = Object.fromEntries(formDataObj);
+        
+        if (formDataObj.has('phase')) {
+            data.phase = formDataObj.getAll('phase').join(', ');
+        }
+        
         setFormData((prev) => ({ ...prev, ...data }));
-        setStep(2);
+        setStep(prev => prev + 1);
     };
 
-    const {data: schools, isLoading, isError, error} = useApiQuery<never[]>(
+    const {data: schools, isLoading, isError, error} = useApiQuery<any[]>(
         ['schools'],
         '/schools',
         {
@@ -56,8 +69,10 @@ export default function AdminSchools() {
 
     const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
-        const step2Data = Object.fromEntries(new FormData(e.currentTarget));
-        const finalData : SchoolPayload = { ...formData, ...step2Data };
+        const formDataObj = new FormData(e.currentTarget);
+        const step2Data = Object.fromEntries(formDataObj);
+        step2Data.phase = formDataObj.getAll('phase').join(', ');
+        const finalData : any = { ...formData, ...step2Data };
 
         // Transform into Swagger-Compliant DTO
         const payload  = {
@@ -71,17 +86,18 @@ export default function AdminSchools() {
             contactNumber: finalData.contactNumber,
             email: finalData.email,
             website: finalData.website,
-            annualFees: Number(finalData.annualFees),
+            annualFees: finalData.annualFees ? Number(finalData.annualFees) : undefined,
             admissionRequirements: finalData.admissionRequirements,
-            passRate: parseFloat(String(finalData.passRate)),
+            passRate: finalData.passRate ? parseFloat(String(finalData.passRate)) : undefined,
+            curriculum: finalData.curriculum && finalData.curriculum !== "" ? finalData.curriculum : undefined,
             imageUrl: finalData.imageUrl || "https://cdn.example.com/school.jpg",
-            phase: (finalData.phase as unknown as string).split(',').map(s => s.trim()),
-            gradesOffered: (finalData.gradesOffered as unknown as string).split(',').map(s => s.trim()),
-            facilities: (finalData.facilities as unknown as string).split(',').map(s => s.trim()),
-            subjects: (finalData.subjects as unknown as string).split(',').map(item => {
+            phase: finalData.phase ? String(finalData.phase).split(',').map(s => s.trim()) : undefined,
+            gradesOffered: finalData.gradesOffered ? String(finalData.gradesOffered).split(',').map(s => s.trim()) : undefined,
+            facilities: finalData.facilities ? String(finalData.facilities).split(',').map(s => s.trim()) : undefined,
+            subjects: finalData.subjects ? String(finalData.subjects).split(',').map(item => {
                 const [name, code] = item.split(':');
                 return { name: name?.trim(), code: code?.trim() };
-            }),
+            }) : undefined,
         };
 
         //call mutation
@@ -89,7 +105,9 @@ export default function AdminSchools() {
             onSuccess: () => {
                 queryClient.invalidateQueries({queryKey: ['schools']}).then(r => console.log('invalidated'));
                 toast.success(`${payload.name} successfully created`);
-                //handleCloseDialog();
+                setFormData({});
+                setStep(1);
+                setAddDialogOpen(false);
             },
             onError: (err) => {
                 toast.error("Failed to update school");
@@ -97,8 +115,6 @@ export default function AdminSchools() {
             }
         });
         console.log('API Payload:', JSON.stringify(payload, null, 2));
-        toast.success("School added successfully");
-        setAddDialogOpen(false);
     };
 
     const handleViewSchool = (schoolId: string) => {
@@ -120,51 +136,192 @@ export default function AdminSchools() {
                                 Add New School
                             </Button>
                         </DialogTrigger>
-                        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-                            <DialogHeader>
-                                <DialogTitle>Add New School</DialogTitle>
-                            </DialogHeader>
-                            <form onSubmit={step === 1 ? handleNext : handleSubmit} className="space-y-6">
-                                {step === 1 ? (
-                                    <div className="space-y-4">
-                                        <h3 className="text-lg font-medium">Step 1: Identity & Location</h3>
-                                        <Input name="name" placeholder="School Name" required defaultValue={formData.name} />
-                                        <Input name="email" type="email" placeholder="Email" required defaultValue={formData.email} />
-                                        <Input name="address" placeholder="Full Address" defaultValue={formData.address} />
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <Input name="province" placeholder="Province" defaultValue={formData.province} />
-                                            <Input name="municipality" placeholder="Municipality" defaultValue={formData.municipality} />
-                                        </div>
-                                        <Input
-                                            id="tenant_id"
-                                            name="tenant_id"
-                                            placeholder="Enter Tenant ID"
-                                            required
-                                            defaultValue={formData.tenant_id}
-                                        />
-                                        <Input name="contactNumber" placeholder="Contact Number" defaultValue={formData.contactNumber} />
-                                        <Button type="submit" className="w-full">Next</Button>
+                        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto p-0 rounded-2xl sm:rounded-3xl shadow-2xl border-0">
+                            <div className="bg-muted/30 px-8 py-5 border-b border-border/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4 sticky top-0 z-10 backdrop-blur-sm">
+                                <DialogTitle className="text-xl font-bold flex items-center gap-2">
+                                    <div className="p-2 bg-primary/10 rounded-lg">
+                                        <School className="h-5 w-5 text-primary" />
                                     </div>
-                                ) : (
-                                    <div className="space-y-4">
-                                        <h3 className="text-lg font-medium">Step 2: Operations & Academic</h3>
-                                        <div className="grid grid-cols-3 gap-4">
-                                            <Input name="type" placeholder="Type" defaultValue={formData.type} />
-                                            <Input name="annualFees" type="number" placeholder="Annual Fees" defaultValue={formData.annualFees} />
-                                            <Input name="passRate" type="number" step="0.1" placeholder="Pass Rate %" defaultValue={formData.passRate} />
+                                    Register New School
+                                </DialogTitle>
+                                <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                                    <span className={`px-2 py-1 rounded-md transition-colors ${step === 1 ? 'bg-primary/10 text-primary font-bold' : ''}`}>Identity</span>
+                                    <ChevronRight className="h-3 w-3 opacity-50" />
+                                    <span className={`px-2 py-1 rounded-md transition-colors ${step === 2 ? 'bg-primary/10 text-primary font-bold' : ''}`}>Location</span>
+                                    <ChevronRight className="h-3 w-3 opacity-50" />
+                                    <span className={`px-2 py-1 rounded-md transition-colors ${step === 3 ? 'bg-primary/10 text-primary font-bold' : ''}`}>Academic</span>
+                                </div>
+                            </div>
+                            <form onSubmit={step < 3 ? handleNext : handleSubmit} className="p-8">
+                                <div className="min-h-[320px]">
+                                    {step === 1 && (
+                                        <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
+                                            <div className="flex items-center gap-2 pb-2 border-b border-border/50">
+                                                <School className="h-4 w-4 text-muted-foreground" />
+                                                <h3 className="text-base font-semibold">Identity & Contact</h3>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-6">
+                                                <div className="space-y-2 col-span-2 sm:col-span-1">
+                                                    <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">School Name <span className="text-destructive">*</span></Label>
+                                                    <Input name="name" placeholder="e.g. Green Valley Academy" required defaultValue={(formData as any).name} className="bg-muted/20" />
+                                                </div>
+                                                <div className="space-y-2 col-span-2 sm:col-span-1">
+                                                    <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Tenant ID <span className="text-destructive">*</span></Label>
+                                                    <Input name="tenant_id" placeholder="e.g. GVA_HS" required defaultValue={(formData as any).tenant_id} className="bg-muted/20" />
+                                                </div>
+                                                <div className="space-y-2 col-span-2 sm:col-span-1">
+                                                    <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Email Address <span className="text-destructive">*</span></Label>
+                                                    <Input name="email" type="email" placeholder="contact@school.com" required defaultValue={(formData as any).email} className="bg-muted/20" />
+                                                </div>
+                                                <div className="space-y-2 col-span-2 sm:col-span-1">
+                                                    <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Contact Number</Label>
+                                                    <Input name="contactNumber" placeholder="+27 83 123 4567" defaultValue={(formData as any).contactNumber} className="bg-muted/20" />
+                                                </div>
+                                                <div className="space-y-2 col-span-2">
+                                                    <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Website</Label>
+                                                    <Input name="website" type="url" placeholder="https://..." defaultValue={(formData as any).website} className="bg-muted/20" />
+                                                </div>
+                                            </div>
                                         </div>
-                                        <Input name="website" type="url" placeholder="Website" defaultValue={formData.website} />
-                                        <Input name="phase" placeholder="Phases (e.g. Creche, Primary)" defaultValue={formData.phase} />
-                                        <Input name="gradesOffered" placeholder="Grades (e.g. R, 1, 2)" defaultValue={formData.gradesOffered} />
-                                        <Input name="facilities" placeholder="Facilities (e.g. Library, Field)" defaultValue={formData.facilities} />
-                                        <Input name="subjects" placeholder="Subjects (e.g. Math:MATH101)" defaultValue={formData.subjects} />
-                                        <Textarea name="admissionRequirements" placeholder="Admission Requirements" defaultValue={formData.admissionRequirements} />
-                                        <div className="flex gap-2">
-                                            <Button type="button" variant="outline" onClick={() => setStep(1)} className="w-full">Back</Button>
-                                            <Button type="submit" className="w-full" disabled={isPending}>{isPending ? 'Submitting ...' : 'Submit'}</Button>
+                                    )}
+
+                                    {step === 2 && (
+                                        <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
+                                            <div className="flex items-center gap-2 pb-2 border-b border-border/50">
+                                                <MapPin className="h-4 w-4 text-muted-foreground" />
+                                                <h3 className="text-base font-semibold">Location & Type</h3>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-6">
+                                                <div className="space-y-2 col-span-2">
+                                                    <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Full Address</Label>
+                                                    <Input name="address" placeholder="123 Main St, Suburb" defaultValue={(formData as any).address} className="bg-muted/20" />
+                                                </div>
+                                                <div className="space-y-2 col-span-2 sm:col-span-1">
+                                                    <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Province</Label>
+                                                    <Input name="province" placeholder="Gauteng" defaultValue={(formData as any).province} className="bg-muted/20" />
+                                                </div>
+                                                <div className="space-y-2 col-span-2 sm:col-span-1">
+                                                    <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Municipality</Label>
+                                                    <Input name="municipality" placeholder="City of Johannesburg" defaultValue={(formData as any).municipality} className="bg-muted/20" />
+                                                </div>
+                                                <div className="space-y-2 col-span-2">
+                                                    <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">School Type</Label>
+                                                    <div className="relative">
+                                                        <Select name="type" defaultValue={(formData as any).type || "Public"}>
+                                                            <SelectTrigger className="h-10 w-full rounded-xl border-input bg-muted/20 px-4 py-2 hover:border-primary/50 transition-colors cursor-pointer">
+                                                                <SelectValue placeholder="Select Type" />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                <SelectItem value="Public">Public</SelectItem>
+                                                                <SelectItem value="Private">Private</SelectItem>
+                                                                <SelectItem value="Independent">Independent</SelectItem>
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </div>
+                                                </div>
+                                            </div>
                                         </div>
-                                    </div>
-                                )}
+                                    )}
+
+                                    {step === 3 && (
+                                        <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
+                                            <div className="flex items-center gap-2 pb-2 border-b border-border/50">
+                                                <BookOpen className="h-4 w-4 text-muted-foreground" />
+                                                <h3 className="text-base font-semibold">Academic & Operations</h3>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-6">
+                                                <div className="space-y-2 col-span-2 p-5 rounded-2xl border bg-primary/5 border-primary/10 shadow-sm relative overflow-hidden">
+                                                    <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
+                                                        <BookOpen className="w-24 h-24" />
+                                                    </div>
+                                                    <Label className="text-xs font-bold uppercase tracking-wider text-primary">Curriculum Setup</Label>
+                                                    <div className="relative mt-2">
+                                                        <Select name="curriculum" defaultValue={(formData as any).curriculum || ""}>
+                                                            <SelectTrigger className="h-11 w-full rounded-xl border-primary/30 bg-background px-4 py-2 hover:border-primary transition-colors cursor-pointer shadow-sm relative z-10">
+                                                                <SelectValue placeholder="Select a Master Curriculum..." />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                <SelectItem value="CAPS">CAPS (South Africa)</SelectItem>
+                                                                <SelectItem value="IEB">IEB</SelectItem>
+                                                                <SelectItem value="Cambridge">Cambridge</SelectItem>
+                                                                <SelectItem value="IB">International Baccalaureate (IB)</SelectItem>
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </div>
+                                                    <p className="text-[11px] text-muted-foreground mt-1.5 font-medium flex items-center gap-1.5">
+                                                        <BookOpen className="h-3 w-3" />
+                                                        This automatically generates and links master subjects.
+                                                    </p>
+                                                </div>
+
+                                                <div className="space-y-2 col-span-2">
+                                                    <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Phases Offered</Label>
+                                                    <div className="flex flex-wrap gap-3 mt-3">
+                                                        {['Creche', 'Primary', 'High School'].map(phase => (
+                                                            <div key={phase} className="relative">
+                                                                <input 
+                                                                    type="checkbox" 
+                                                                    name="phase" 
+                                                                    value={phase} 
+                                                                    id={`phase-${phase}`} 
+                                                                    defaultChecked={(formData as any).phase?.includes(phase)}
+                                                                    className="peer sr-only"
+                                                                />
+                                                                <label 
+                                                                    htmlFor={`phase-${phase}`} 
+                                                                    className="flex items-center justify-center px-5 py-2 text-sm font-semibold rounded-full border-2 border-border/60 bg-muted/30 text-muted-foreground transition-all hover:bg-muted cursor-pointer peer-checked:border-primary peer-checked:bg-primary/10 peer-checked:text-primary peer-checked:shadow-sm"
+                                                                >
+                                                                    {phase}
+                                                                </label>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+
+                                                <div className="space-y-2 col-span-2 sm:col-span-1">
+                                                    <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Grades Offered</Label>
+                                                    <Input name="gradesOffered" placeholder="e.g. R, 1, 2, 12" defaultValue={(formData as any).gradesOffered} className="bg-muted/20" />
+                                                </div>
+                                                
+                                                <div className="space-y-2 col-span-2 sm:col-span-1">
+                                                    <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Pass Rate (%)</Label>
+                                                    <Input name="passRate" type="number" step="0.1" placeholder="e.g. 98.5" defaultValue={(formData as any).passRate} className="bg-muted/20" />
+                                                </div>
+
+                                                <div className="space-y-2 col-span-2 sm:col-span-1">
+                                                    <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Annual Fees</Label>
+                                                    <Input name="annualFees" type="number" placeholder="e.g. 35000" defaultValue={(formData as any).annualFees} className="bg-muted/20" />
+                                                </div>
+
+                                                <div className="space-y-2 col-span-2 sm:col-span-1">
+                                                    <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Facilities</Label>
+                                                    <Input name="facilities" placeholder="Library, Lab, Gym" defaultValue={(formData as any).facilities} className="bg-muted/20" />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="flex items-center justify-between pt-6 border-t mt-8">
+                                    <Button type="button" variant="ghost" onClick={() => {
+                                        if (step > 1) setStep(step - 1);
+                                        else setAddDialogOpen(false);
+                                    }} className="text-muted-foreground hover:text-foreground">
+                                        {step > 1 ? (
+                                            <><ChevronLeft className="mr-2 h-4 w-4" /> Back</>
+                                        ) : 'Cancel'}
+                                    </Button>
+                                    
+                                    <Button type="submit" disabled={isPending} className="px-8 shadow-md rounded-full font-semibold transition-all hover:scale-105 active:scale-95">
+                                        {step < 3 ? (
+                                            <>Next Step <ChevronRight className="ml-2 h-4 w-4" /></>
+                                        ) : isPending ? (
+                                            'Registering...'
+                                        ) : (
+                                            <><CheckCircle2 className="mr-2 h-4 w-4" /> Complete Registration</>
+                                        )}
+                                    </Button>
+                                </div>
                             </form>
                         </DialogContent>
                     </Dialog>

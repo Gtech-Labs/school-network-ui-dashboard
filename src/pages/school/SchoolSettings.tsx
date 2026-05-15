@@ -14,6 +14,13 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
 import { 
     Image as ImageIcon, 
     Upload, 
@@ -25,7 +32,8 @@ import {
     BookOpen, 
     GraduationCap,
     Loader2,
-    Info
+    Info,
+    ChevronDown
 } from 'lucide-react';
 
 export default function SchoolSettings() {
@@ -84,15 +92,13 @@ export default function SchoolSettings() {
         const data = Object.fromEntries(formData.entries());
 
         // Helper for arrays
-        const toArray = (val: any) => String(val).split(',').map(s => s.trim()).filter(Boolean);
+        const toArray = (val: any) => val ? String(val).split(',').map(s => s.trim()).filter(Boolean) : [];
 
-        const payload = {
-            ...data,
-            phase: toArray(data.phase),
-            gradesOffered: toArray(data.gradesOffered),
-            facilities: toArray(data.facilities),
-            extracurriculars: toArray(data.extracurriculars),
-        };
+        const payload: any = { ...data };
+        if (data.phase !== undefined) payload.phase = toArray(data.phase);
+        if (data.gradesOffered !== undefined) payload.gradesOffered = toArray(data.gradesOffered);
+        if (data.facilities !== undefined) payload.facilities = toArray(data.facilities);
+        if (data.extracurriculars !== undefined) payload.extracurriculars = toArray(data.extracurriculars);
 
         updateSchool({
             method: 'PATCH',
@@ -213,8 +219,19 @@ export default function SchoolSettings() {
                                                 <Input id="name" name="name" defaultValue={school.name} placeholder="e.g. Green Valley Academy" />
                                             </div>
                                             <div className="space-y-2">
-                                                <Label htmlFor="type">School Type</Label>
-                                                <Input id="type" name="type" defaultValue={school.type} placeholder="Public / Private" />
+                                                <Label htmlFor="type" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">School Type</Label>
+                                                <div className="relative">
+                                                    <Select name="type" defaultValue={school.type || "Public"}>
+                                                        <SelectTrigger className="h-10 w-full rounded-xl border-input bg-muted/20 px-4 py-2 hover:border-primary/50 transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-50">
+                                                            <SelectValue placeholder="Select Type" />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            <SelectItem value="Public">Public</SelectItem>
+                                                            <SelectItem value="Private">Private</SelectItem>
+                                                            <SelectItem value="Independent">Independent</SelectItem>
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
                                             </div>
                                         </div>
 
@@ -270,24 +287,7 @@ export default function SchoolSettings() {
                                             </div>
                                         </div>
 
-                                        <Separator className="my-2" />
 
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                            <div className="space-y-2">
-                                                <Label className="flex items-center gap-2">
-                                                    <BookOpen className="h-3.5 w-3.5 text-muted-foreground" /> Phases Offered
-                                                </Label>
-                                                <Input name="phase" defaultValue={school.phase?.join(', ')} placeholder="Primary, High School" />
-                                                <p className="text-[10px] text-muted-foreground italic">Comma separated</p>
-                                            </div>
-                                            <div className="space-y-2">
-                                                <Label className="flex items-center gap-2">
-                                                    <GraduationCap className="h-3.5 w-3.5 text-muted-foreground" /> Grades Offered
-                                                </Label>
-                                                <Input name="gradesOffered" defaultValue={school.gradesOffered?.join(', ')} placeholder="Grade 1, Grade 2" />
-                                                <p className="text-[10px] text-muted-foreground italic">Comma separated</p>
-                                            </div>
-                                        </div>
 
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                             <div className="space-y-2">
@@ -316,10 +316,74 @@ export default function SchoolSettings() {
                 </TabsContent>
 
                 <TabsContent value="academic">
-                    <Card className="border-dashed h-60 flex flex-col items-center justify-center text-center">
-                        <BookOpen className="h-10 w-10 text-muted-foreground/40 mb-4" />
-                        <CardTitle className="text-muted-foreground">Academic Configuration</CardTitle>
-                        <CardDescription>Curriculum settings and subject management coming soon.</CardDescription>
+                    <Card className="border-none shadow-none bg-transparent">
+                        <CardHeader className="px-0 pt-0">
+                            <CardTitle>Academic Configuration</CardTitle>
+                            <CardDescription>Manage phases, grades, and curriculum.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="px-0">
+                            <form onSubmit={handleGeneralUpdate} className="space-y-6">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div className="space-y-2">
+                                        <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                                            <BookOpen className="h-3.5 w-3.5" /> Phases Offered
+                                        </Label>
+                                        <div className="flex flex-wrap gap-3 mt-3">
+                                            {['Creche', 'Primary', 'High School'].map(phase => (
+                                                <div key={phase} className="relative">
+                                                    <input 
+                                                        type="checkbox" 
+                                                        name="phase" 
+                                                        value={phase} 
+                                                        id={`phase-${phase}`} 
+                                                        defaultChecked={school.phase?.includes(phase)}
+                                                        className="peer sr-only"
+                                                    />
+                                                    <label 
+                                                        htmlFor={`phase-${phase}`} 
+                                                        className="flex items-center justify-center px-5 py-2 text-sm font-semibold rounded-full border-2 border-border/60 bg-muted/30 text-muted-foreground transition-all hover:bg-muted cursor-pointer peer-checked:border-primary peer-checked:bg-primary/10 peer-checked:text-primary peer-checked:shadow-sm"
+                                                    >
+                                                        {phase}
+                                                    </label>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                                            <GraduationCap className="h-3.5 w-3.5" /> Grades Offered
+                                        </Label>
+                                        <Input name="gradesOffered" defaultValue={school.gradesOffered?.join(', ')} placeholder="Grade 1, Grade 2" className="bg-muted/20" />
+                                        <p className="text-[10px] text-muted-foreground italic">Comma separated</p>
+                                    </div>
+                                </div>
+                                <div className="space-y-2 p-5 rounded-2xl border bg-primary/5 border-primary/10 shadow-sm relative overflow-hidden">
+                                    <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
+                                        <BookOpen className="w-24 h-24" />
+                                    </div>
+                                    <Label className="text-xs font-bold uppercase tracking-wider text-primary">Curriculum Setup</Label>
+                                    <div className="relative mt-2">
+                                        <Select name="curriculum" defaultValue={school.curriculum || ""}>
+                                            <SelectTrigger className="h-11 w-full rounded-xl border-primary/30 bg-background px-4 py-2 hover:border-primary transition-colors cursor-pointer shadow-sm relative z-10">
+                                                <SelectValue placeholder="Select a Master Curriculum..." />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="CAPS">CAPS (South Africa)</SelectItem>
+                                                <SelectItem value="IEB">IEB</SelectItem>
+                                                <SelectItem value="Cambridge">Cambridge</SelectItem>
+                                                <SelectItem value="IB">International Baccalaureate (IB)</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                </div>
+                                <div className="flex justify-end pt-4">
+                                    <Button type="submit" disabled={isUpdating} className="px-10">
+                                        {isUpdating ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                                        Save Changes
+                                    </Button>
+                                </div>
+                            </form>
+                        </CardContent>
                     </Card>
                 </TabsContent>
 

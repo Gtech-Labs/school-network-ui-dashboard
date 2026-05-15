@@ -259,8 +259,12 @@ export function DashboardLayout({ role }: DashboardLayoutProps) {
             />
             {sidebarOpen && (
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate">Grace Kalombo</p>
-                <p className="text-xs text-muted-foreground truncate">grace@school-network.co.za</p>
+                <p className="text-sm font-medium truncate">
+                  {user && 'firstName' in user ? `${(user as any).firstName} ${(user as any).lastName}` : user?.email ? (user as any).email.split('@')[0] : 'User'}
+                </p>
+                <p className="text-xs text-muted-foreground truncate">
+                  {(user as any)?.email || 'user@school-network.co.za'}
+                </p>
               </div>
             )}
           </div>
