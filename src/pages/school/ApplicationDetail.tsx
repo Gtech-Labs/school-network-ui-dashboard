@@ -16,50 +16,52 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Loader2 } from 'lucide-react';
 
 const statusColors: Record<string, string> = {
+  'DRAFT': 'bg-muted text-muted-foreground border-muted-foreground/20',
   'SUBMITTED': 'bg-blue-500/10 text-blue-500 border-blue-500/20',
   'UNDER-REVIEW': 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20',
-  'WAITING-LIST-A': 'bg-orange-500/10 text-orange-500 border-orange-500/20',
-  'WAITING-LIST-B': 'bg-orange-400/10 text-orange-400 border-orange-400/20',
-  'PROVISIONALLY-ACCEPTED': 'bg-purple-500/10 text-purple-500 border-purple-500/20',
-  'ACCEPTED': 'bg-green-500/10 text-green-500 border-green-500/20',
-  'PARENT-ACCEPTED': 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20',
-  'REGISTERED': 'bg-primary/10 text-primary border-primary/20',
+  'WAITLISTED': 'bg-orange-500/10 text-orange-500 border-orange-500/20',
+  'ACCEPTED': 'bg-purple-500/10 text-purple-500 border-purple-500/20',
+  'PENDING-ENROLLMENT': 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20',
+  'ENROLLED': 'bg-green-500/10 text-green-500 border-green-500/20',
   'REJECTED': 'bg-red-500/10 text-red-500 border-red-500/20',
 };
 
 const statusLabels: Record<string, string> = {
+  'DRAFT': 'Draft',
   'SUBMITTED': 'Submitted',
   'UNDER-REVIEW': 'Under Review',
-  'WAITING-LIST-A': 'Waiting List A',
-  'WAITING-LIST-B': 'Waiting List B',
-  'PROVISIONALLY-ACCEPTED': 'Provisionally Accepted',
+  'WAITLISTED': 'Waitlisted',
   'ACCEPTED': 'Accepted',
-  'PARENT-ACCEPTED': 'Parent Accepted Offer',
-  'REGISTERED': 'Registered',
+  'PENDING-ENROLLMENT': 'Pending Enrollment',
+  'ENROLLED': 'Enrolled',
   'REJECTED': 'Rejected',
 };
 
 const statusOptions = [
+  { value: 'DRAFT', label: 'Draft' },
   { value: 'SUBMITTED', label: 'Submitted' },
   { value: 'UNDER-REVIEW', label: 'Under Review' },
-  { value: 'WAITING-LIST-A', label: 'Waiting List A' },
-  { value: 'WAITING-LIST-B', label: 'Waiting List B' },
-  { value: 'PROVISIONALLY-ACCEPTED', label: 'Provisionally Accepted' },
+  { value: 'WAITLISTED', label: 'Waitlisted' },
   { value: 'ACCEPTED', label: 'Accepted' },
-  { value: 'PARENT-ACCEPTED', label: 'Parent Accepted Offer' },
-  { value: 'REGISTERED', label: 'Registered' },
+  { value: 'PENDING-ENROLLMENT', label: 'Pending Enrollment' },
+  { value: 'ENROLLED', label: 'Enrolled' },
   { value: 'REJECTED', label: 'Rejected' },
 ];
 
 export default function ApplicationDetail() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
-  const { data: application, isLoading } = useApplicationDetail(id);
+  const { data, isLoading } = useApplicationDetail(id);
+  const application = data as any;
   const { mutate: updateStatus, isPending } = useUpdateApplication(id);
 
   const [isStatusDialogOpen, setIsStatusDialogOpen] = useState(false);
   const [newStatus, setNewStatus] = useState<string>('');
   const [statusMessage, setStatusMessage] = useState('');
+  const [invoiceAmount, setInvoiceAmount] = useState<string>('');
+  const [invoiceDueDate, setInvoiceDueDate] = useState<string>('');
+  const [invoiceNote, setInvoiceNote] = useState<string>('');
+  const [invoiceTerm, setInvoiceTerm] = useState<string>('1');
   const [viewingDoc, setViewingDoc] = useState<{ name: string; type: string; uploadedDate: string; url: string } | null>(null);
 
   if (isLoading) {
@@ -102,14 +104,38 @@ export default function ApplicationDetail() {
       return;
     }
 
+    const payload: any = {
+      status: newStatus,
+      statusMessage: statusMessage || undefined,
+    };
+
+    if (newStatus === 'PENDING-ENROLLMENT') {
+      if (!invoiceAmount || isNaN(Number(invoiceAmount)) || Number(invoiceAmount) <= 0) {
+        toast.error('Please enter a valid invoice amount');
+        return;
+      }
+      if (!invoiceDueDate) {
+        toast.error('Please enter an invoice due date');
+        return;
+      }
+      payload.invoiceAmount = Number(invoiceAmount);
+      payload.invoiceDueDate = invoiceDueDate;
+      payload.invoiceNote = invoiceNote || undefined;
+      payload.invoiceTerm = Number(invoiceTerm) || 1;
+    }
+
     updateStatus(
-      { status: newStatus },
+      payload,
       {
         onSuccess: () => {
           toast.success(`Application status updated to: ${statusLabels[newStatus] || newStatus}`);
           setIsStatusDialogOpen(false);
           setNewStatus('');
           setStatusMessage('');
+          setInvoiceAmount('');
+          setInvoiceDueDate('');
+          setInvoiceNote('');
+          setInvoiceTerm('1');
         },
         onError: () => {
           toast.error('Failed to update status');
@@ -327,6 +353,68 @@ export default function ApplicationDetail() {
                         rows={4}
                       />
                     </div>
+
+                    {newStatus === 'PENDING-ENROLLMENT' && (
+                      <div className="border border-border rounded-lg p-4 bg-muted/20 space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
+                        <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                          Create Enrollment Invoice
+                        </h4>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="invoice-amount" className="text-xs">Amount (ZAR)</Label>
+                            <input
+                              id="invoice-amount"
+                              type="number"
+                              placeholder="e.g. 5000"
+                              value={invoiceAmount}
+                              onChange={(e) => setInvoiceAmount(e.target.value)}
+                              className="w-full flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="invoice-due-date" className="text-xs">Due Date</Label>
+                            <input
+                              id="invoice-due-date"
+                              type="date"
+                              value={invoiceDueDate}
+                              onChange={(e) => setInvoiceDueDate(e.target.value)}
+                              className="w-full flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                            />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="invoice-note" className="text-xs">Invoice Note / Description</Label>
+                            <input
+                              id="invoice-note"
+                              type="text"
+                              placeholder="e.g. Term 1 Registration & Enrollment Fee"
+                              value={invoiceNote}
+                              onChange={(e) => setInvoiceNote(e.target.value)}
+                              className="w-full flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="invoice-term" className="text-xs">School Term</Label>
+                            <Select value={invoiceTerm} onValueChange={setInvoiceTerm}>
+                              <SelectTrigger id="invoice-term">
+                                <SelectValue placeholder="Select term" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="1">Term 1</SelectItem>
+                                <SelectItem value="2">Term 2</SelectItem>
+                                <SelectItem value="3">Term 3</SelectItem>
+                                <SelectItem value="4">Term 4</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                        <p className="text-xs text-muted-foreground font-medium">
+                          Note: This invoice will be generated and automatically sent to both Parent & Student via Email, WhatsApp, and In-App notification.
+                        </p>
+                      </div>
+                    )}
 
                     <Button onClick={handleStatusUpdate} className="w-full" disabled={isPending}>
                       {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
+import { format } from 'date-fns';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -203,7 +204,9 @@ export default function ParentDetail() {
                 <p className="text-sm text-muted-foreground flex items-center gap-1">
                   <Calendar className="h-3 w-3" /> Registered On
                 </p>
-                <p className="font-medium">{parent.createdAt}</p>
+                <p className="font-medium">
+                  {parent.createdAt ? format(new Date(parent.createdAt), 'MMM dd, yyyy HH:mm') : 'N/A'}
+                </p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Status</p>

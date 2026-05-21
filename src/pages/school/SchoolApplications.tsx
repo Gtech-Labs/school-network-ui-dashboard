@@ -15,26 +15,24 @@ import { useSchoolId } from '@/hooks/schools/school.hook';
 const ITEMS_PER_PAGE = 10;
 
 const statusColors: Record<string, string> = {
+  'DRAFT': 'bg-muted text-muted-foreground border-muted-foreground/20',
   'SUBMITTED': 'bg-blue-500/10 text-blue-500 border-blue-500/20',
   'UNDER-REVIEW': 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20',
-  'WAITING-LIST-A': 'bg-orange-500/10 text-orange-500 border-orange-500/20',
-  'WAITING-LIST-B': 'bg-orange-400/10 text-orange-400 border-orange-400/20',
-  'PROVISIONALLY-ACCEPTED': 'bg-purple-500/10 text-purple-500 border-purple-500/20',
-  'ACCEPTED': 'bg-green-500/10 text-green-500 border-green-500/20',
-  'PARENT-ACCEPTED': 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20',
-  'REGISTERED': 'bg-primary/10 text-primary border-primary/20',
+  'WAITLISTED': 'bg-orange-500/10 text-orange-500 border-orange-500/20',
+  'ACCEPTED': 'bg-purple-500/10 text-purple-500 border-purple-500/20',
+  'PENDING-ENROLLMENT': 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20',
+  'ENROLLED': 'bg-green-500/10 text-green-500 border-green-500/20',
   'REJECTED': 'bg-red-500/10 text-red-500 border-red-500/20',
 };
 
 const statusLabels: Record<string, string> = {
+  'DRAFT': 'Draft',
   'SUBMITTED': 'Submitted',
   'UNDER-REVIEW': 'Under Review',
-  'WAITING-LIST-A': 'Waiting List A',
-  'WAITING-LIST-B': 'Waiting List B',
-  'PROVISIONALLY-ACCEPTED': 'Provisionally Accepted',
+  'WAITLISTED': 'Waitlisted',
   'ACCEPTED': 'Accepted',
-  'PARENT-ACCEPTED': 'Parent Accepted Offer',
-  'REGISTERED': 'Registered',
+  'PENDING-ENROLLMENT': 'Pending Enrollment',
+  'ENROLLED': 'Enrolled',
   'REJECTED': 'Rejected',
 };
 
@@ -120,11 +118,11 @@ export default function SchoolApplications() {
         </Card>
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Registered</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Enrolled</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {allApplications.filter((a: any) => a.status === 'REGISTERED').length}
+              {allApplications.filter((a: any) => a.status === 'ENROLLED').length}
             </div>
           </CardContent>
         </Card>
@@ -163,14 +161,13 @@ export default function SchoolApplications() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Statuses</SelectItem>
+                  <SelectItem value="DRAFT">Draft</SelectItem>
                   <SelectItem value="SUBMITTED">Submitted</SelectItem>
                   <SelectItem value="UNDER-REVIEW">Under Review</SelectItem>
-                  <SelectItem value="WAITING-LIST-A">Waiting List A</SelectItem>
-                  <SelectItem value="WAITING-LIST-B">Waiting List B</SelectItem>
-                  <SelectItem value="PROVISIONALLY-ACCEPTED">Provisionally Accepted</SelectItem>
+                  <SelectItem value="WAITLISTED">Waitlisted</SelectItem>
                   <SelectItem value="ACCEPTED">Accepted</SelectItem>
-                  <SelectItem value="PARENT-ACCEPTED">Parent Accepted Offer</SelectItem>
-                  <SelectItem value="REGISTERED">Registered</SelectItem>
+                  <SelectItem value="PENDING-ENROLLMENT">Pending Enrollment</SelectItem>
+                  <SelectItem value="ENROLLED">Enrolled</SelectItem>
                   <SelectItem value="REJECTED">Rejected</SelectItem>
                 </SelectContent>
               </Select>
