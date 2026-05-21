@@ -8,12 +8,15 @@ import {Label} from '@/components/ui/label';
 import {Textarea} from '@/components/ui/textarea';
 import {Dialog, DialogContent, DialogHeader, DialogTitle} from '@/components/ui/dialog';
 import {Switch} from '@/components/ui/switch';
-import {ArrowLeft, Mail, Phone, Globe, MapPin, Award, Edit, Ban, Trash2, Image as ImageIcon} from 'lucide-react';
+import {ArrowLeft, Mail, Phone, Globe, MapPin, Award, Edit, Ban, Trash2, Image as ImageIcon, Loader2, School, GraduationCap} from 'lucide-react';
 import {toast} from 'sonner';
 import {getSchoolFeatures, setSchoolFeatures} from '@/lib/schoolFeatures';
 import {useApiQuery} from '@/hooks/use-api-query.ts';
 import {useApiMutation} from "@/hooks/use-api-mutation.ts";
 import {useQueryClient} from "@tanstack/react-query";
+import {useUploadMutation} from "@/hooks/use-upload-mutation";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Separator } from '@/components/ui/separator';
 
 export default function SchoolDetail() {
     const queryClient = useQueryClient();
@@ -21,38 +24,48 @@ export default function SchoolDetail() {
     const navigate = useNavigate();
     const [editDialogOpen, setEditDialogOpen] = useState(false);
     const {mutate, isPending, error} = useApiMutation<any>();
+    const uploadMutation = useUploadMutation();
+
+    const handleMediaUpload = async (file: File, field: 'logoUrl' | 'bannerUrl') => {
+        const uploadToast = toast.loading(`Uploading ${field === 'logoUrl' ? 'logo' : 'banner'}...`);
+        
+        try {
+            const uploadResult = await uploadMutation.mutateAsync({ file });
+            const imageUrl = uploadResult.url;
+
+            await mutate({
+                method: 'PATCH',
+                endpoint: `schools/${id}`,
+                data: { [field]: imageUrl }
+            }, {
+                onSuccess: () => {
+                    queryClient.invalidateQueries({ queryKey: ['school'] });
+                    toast.success(`${field === 'logoUrl' ? 'Logo' : 'Banner'} updated successfully`, { id: uploadToast });
+                },
+                onError: () => {
+                    toast.error(`Failed to update school ${field === 'logoUrl' ? 'logo' : 'banner'}`, { id: uploadToast });
+                }
+            });
+        } catch (error) {
+            toast.error(`Failed to upload ${field === 'logoUrl' ? 'logo' : 'banner'}`, { id: uploadToast });
+            console.error(error);
+        }
+    };
 
     const {data: school, isLoading, isError} = useApiQuery(
         ['school'],
-        `/schools/${id}`,
-        {
-            // any option
-        }
+        `/schools/${id}`
     );
 
-    // Feature toggles state - load from localStorage
     const [features, setFeatures] = useState(() => {
-        if (id) {
-            return getSchoolFeatures(id);
-        }
+        if (id) return getSchoolFeatures(id);
         return {
-            applications: true,
-            students: true,
-            teachers: true,
-            parents: true,
-            payments: true,
-            academicProgress: true,
-            attendance: true,
-            calendar: true,
-            timetable: true,
-            announcements: true,
-            activityLog: true,
+            applications: true, students: true, teachers: true, parents: true, payments: true,
+            academicProgress: true, attendance: true, calendar: true, timetable: true,
+            announcements: true, activityLog: true,
         };
     });
 
-    // const school = mockSchools.find(s => s.id === id);
-
-    // Load features from localStorage when component mounts or id changes
     useEffect(() => {
         if (id) {
             const loadedFeatures = getSchoolFeatures(id);
@@ -60,59 +73,39 @@ export default function SchoolDetail() {
         }
     }, [id]);
 
+    if (isLoading) return (
+        <div className="flex items-center justify-center h-[60vh]">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+    );
 
-    {
-        isError && <p>Error: {error}</p>
-    }
+    if (!school) return (
+        <div className="space-y-6 animate-fade-in">
+            <Button variant="outline" onClick={() => navigate('/admin/schools')}>
+                <ArrowLeft className="mr-2 h-4 w-4"/> Back to Schools
+            </Button>
+            <Card className="border-dashed h-40 flex items-center justify-center">
+                <p className="text-muted-foreground">School not found</p>
+            </Card>
+        </div>
+    );
 
-    {
-        isLoading && <p>Loading...</p>
-    }
-
-    if (!school) {
-        return (
-            <div className="space-y-6 animate-fade-in">
-                <Button variant="outline" onClick={() => navigate('/admin/schools')}>
-                    <ArrowLeft className="mr-2 h-4 w-4"/>
-                    Back to Schools
-                </Button>
-                <Card>
-                    <CardContent className="pt-6">
-                        <p className="text-center text-muted-foreground">School not found</p>
-                    </CardContent>
-                </Card>
-            </div>
-        );
-    }
-
-
-    const handleEdit = () => {
-        setEditDialogOpen(true);
-    };
+    const handleEdit = () => setEditDialogOpen(true);
 
     const handleEditSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-
         e.preventDefault();
         const formData = new FormData(e.currentTarget);
-
-        // Convert FormData to a plain object
         const rawData = Object.fromEntries(formData.entries());
 
-        // Helper function to turn comma-separated strings into clean arrays
         const formatArray = (value: any) => {
             if (!value) return [];
-            return String(value)
-                .split(',')
-                .map(item => item.trim())
-                .filter(item => item !== ""); // Remove empty strings
+            return String(value).split(',').map(item => item.trim()).filter(item => item !== "");
         };
 
-        // Construct the final payload
         const payload = {
             ...rawData,
             passRate: parseFloat(rawData.passRate as string) || 0,
             annualFees: parseInt(rawData.annualFees as string) || 0,
-            // Transform specific fields into arrays
             phase: formatArray(rawData.phase),
             gradesOffered: formatArray(rawData.gradesOffered),
             facilities: formatArray(rawData.facilities),
@@ -129,324 +122,320 @@ export default function SchoolDetail() {
                 toast.error("Failed to update school");
                 console.error(err);
             }
-
         });
     };
 
     const handleSuspend = () => {
-        toast.success(`${school.name} has been suspended`);
-        navigate('/admin/schools');
+        mutate({
+            method: 'PATCH',
+            endpoint: `schools/${id}`,
+            data: { schoolStatus: school.schoolStatus === 'Active' ? 'Suspended' : 'Active' }
+        }, {
+            onSuccess: () => {
+                queryClient.invalidateQueries({queryKey: ['school']});
+                toast.success(`${school.name} has been ${school.schoolStatus === 'Active' ? 'suspended' : 'activated'}`);
+            }
+        });
     };
-
     const handleDelete = () => {
-
         mutate({method: 'DELETE', endpoint: `schools/${id}`, data: {}}, {
             onSuccess: () => {
-                queryClient.invalidateQueries({queryKey: ['schools']}).then(r => console.log('invalidated'));
-                toast.success(`${school.name} has been deleted`);
+                queryClient.invalidateQueries({queryKey: ['schools']});
+                toast.success(`${school.name} deleted`);
                 navigate('/admin/schools');
-            },
-            onError: (err) => {
-                toast.error("Failed to delete school");
-                console.error(err);
             }
         });
     };
 
     const handleFeatureToggle = (feature: keyof typeof features) => {
         if (!id) return;
-
-        const newFeatures = {
-            ...features,
-            [feature]: !features[feature]
-        };
-
+        const newFeatures = { ...features, [feature]: !features[feature] };
         setFeatures(newFeatures);
         setSchoolFeatures(id, newFeatures);
-
-        toast.success(`${feature.charAt(0).toUpperCase() + feature.slice(1)} feature ${!features[feature] ? 'enabled' : 'disabled'}`);
+        toast.success(`${feature} ${!features[feature] ? 'enabled' : 'disabled'}`);
     };
 
     return (
-        <div className="space-y-6 animate-fade-in">
-            {/* Header with Back Button */}
-            <div className="flex items-center justify-between">
-                <Button variant="outline" onClick={() => navigate('/admin/schools')}>
+        <div className="space-y-8 animate-in fade-in duration-500 pb-20">
+            {/* Navigation & Actions Top Bar */}
+            <div className="flex items-center justify-between sticky top-0 z-20 bg-background/80 backdrop-blur-md py-4 border-b -mx-6 px-6">
+                <Button variant="ghost" onClick={() => navigate('/admin/schools')} className="hover:bg-transparent -ml-4">
                     <ArrowLeft className="mr-2 h-4 w-4"/>
-                    Back to Schools
+                    <span className="font-semibold">Schools</span>
                 </Button>
                 <div className="flex gap-2">
-                    <Button variant="outline" onClick={handleEdit}>
-                        <Edit className="mr-2 h-4 w-4"/>
-                        Edit
+                    <Button variant="outline" size="sm" onClick={handleEdit}>
+                        <Edit className="mr-2 h-4 w-4"/> Edit
                     </Button>
-                    {school.schoolStatus === 'Active' && (
-                        <Button variant="outline" onClick={handleSuspend}>
-                            <Ban className="mr-2 h-4 w-4"/>
-                            Suspend
-                        </Button>
-                    )}
-                    <Button variant="destructive" onClick={handleDelete}>
-                        <Trash2 className="mr-2 h-4 w-4"/>
-                        Delete
+                    <Button variant="outline" size="sm" onClick={handleSuspend}>
+                        {school.schoolStatus === 'Active' ? <Ban className="mr-2 h-4 w-4"/> : <Award className="mr-2 h-4 w-4"/>}
+                        {school.schoolStatus === 'Active' ? 'Suspend' : 'Activate'}
+                    </Button>
+                    <Button variant="destructive" size="sm" onClick={handleDelete}>
+                        <Trash2 className="mr-2 h-4 w-4"/> Delete
                     </Button>
                 </div>
             </div>
 
-            {/* School Header Card */}
-            <Card>
-                <CardHeader>
-                    <div className="flex items-start justify-between">
-                        <div>
-                            <CardTitle className="text-3xl mb-2">{school?.name}</CardTitle>
-                            <div className="flex gap-2 mt-2">
-                                <Badge variant={
-                                    school.type === 'Public' ? 'default' :
-                                        school.type === 'Private' ? 'secondary' : 'outline'
-                                }>
-                                    {school.type}
-                                </Badge>
-                                <Badge variant={
-                                    school.schoolStatus === 'Active' ? 'default' :
-                                        school.schoolStatus === 'Pending' ? 'secondary' : 'destructive'
-                                }>
-                                    {school.schoolStatus}
-                                </Badge>
+            {/* Hero Banner Section */}
+            <div className="relative rounded-3xl overflow-hidden shadow-2xl border bg-muted">
+                {/* Banner Background */}
+                <div className="h-64 md:h-80 w-full relative group">
+                    {school.bannerUrl ? (
+                        <img src={school.bannerUrl} alt="Banner" className="w-full h-full object-cover" />
+                    ) : (
+                        <div className="w-full h-full bg-gradient-to-r from-primary/20 via-primary/10 to-background flex items-center justify-center">
+                            <ImageIcon className="h-12 w-12 text-primary/20" />
+                        </div>
+                    )}
+                    <div 
+                        className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all flex items-center justify-center cursor-pointer"
+                        onClick={() => document.getElementById('hero-banner-upload')?.click()}
+                    >
+                        <Button variant="secondary" className="opacity-0 group-hover:opacity-100 transition-opacity">
+                            Change Banner
+                        </Button>
+                        <input id="hero-banner-upload" type="file" className="hidden" accept="image/*" onChange={(e) => e.target.files?.[0] && handleMediaUpload(e.target.files[0], 'bannerUrl')} />
+                    </div>
+                </div>
+
+                {/* Profile Overlay */}
+                <div className="px-8 pb-8 pt-0 relative">
+                    <div className="flex flex-col md:flex-row items-end gap-6 -mt-16 md:-mt-20 relative z-10">
+                        {/* Logo Container */}
+                        <div 
+                            className="relative h-32 w-32 md:h-40 md:w-40 rounded-2xl border-4 border-background bg-card shadow-xl overflow-hidden group cursor-pointer"
+                            onClick={() => document.getElementById('hero-logo-upload')?.click()}
+                        >
+                            {school.logoUrl ? (
+                                <img src={school.logoUrl} alt="Logo" className="w-full h-full object-contain p-2" />
+                            ) : (
+                                <div className="w-full h-full flex items-center justify-center bg-muted">
+                                    <School className="h-12 w-12 text-muted-foreground" />
+                                </div>
+                            )}
+                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                                <ImageIcon className="h-6 w-6 text-white" />
+                            </div>
+                            <input id="hero-logo-upload" type="file" className="hidden" accept="image/*" onChange={(e) => e.target.files?.[0] && handleMediaUpload(e.target.files[0], 'logoUrl')} />
+                        </div>
+
+                        {/* Title & Stats */}
+                        <div className="flex-1 space-y-2 mb-2">
+                            <div className="flex items-center gap-3 flex-wrap">
+                                <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-foreground">{school.name}</h1>
+                                <div className="flex gap-2">
+                                    <Badge variant={school.schoolStatus === 'Active' ? 'default' : 'destructive'} className="rounded-full px-4">
+                                        {school.schoolStatus}
+                                    </Badge>
+                                    <Badge variant="secondary" className="rounded-full px-4">{school.type}</Badge>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-4 text-muted-foreground text-sm font-medium">
+                                <div className="flex items-center gap-1.5">
+                                    <MapPin className="h-4 w-4" />
+                                    {school.province}, {school.municipality}
+                                </div>
+                                <div className="flex items-center gap-1.5 text-primary">
+                                    <Globe className="h-4 w-4" />
+                                    {school.website || 'No website'}
+                                </div>
                             </div>
                         </div>
                     </div>
-                </CardHeader>
-            </Card>
-
-            {/* Main Info Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Contact Information */}
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Contact Information</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        <div className="flex items-start gap-3">
-                            <Mail className="h-5 w-5 text-muted-foreground mt-0.5"/>
-                            <div>
-                                <p className="text-sm font-medium">Email</p>
-                                <p className="text-sm text-muted-foreground">{school?.email}</p>
-                            </div>
-                        </div>
-                        <div className="flex items-start gap-3">
-                            <Phone className="h-5 w-5 text-muted-foreground mt-0.5"/>
-                            <div>
-                                <p className="text-sm font-medium">Phone</p>
-                                <p className="text-sm text-muted-foreground">+1 (555) 123-4567</p>
-                            </div>
-                        </div>
-                        <div className="flex items-start gap-3">
-                            <Globe className="h-5 w-5 text-muted-foreground mt-0.5"/>
-                            <div>
-                                <p className="text-sm font-medium">Website</p>
-                                <p className="text-sm text-muted-foreground">www.{school.name.toLowerCase().replace(/\s+/g, '')}.edu</p>
-                            </div>
-                        </div>
-                        <div className="flex items-start gap-3">
-                            <MapPin className="h-5 w-5 text-muted-foreground mt-0.5"/>
-                            <div>
-                                <p className="text-sm font-medium">Address</p>
-                                <p className="text-sm text-muted-foreground">
-                                    123 Education Street<br/>
-                                    School District, ST 12345
-                                </p>
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-
-                {/* Statistics */}
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Statistics</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        <div className="flex justify-between items-center">
-                            <span className="text-sm font-medium">Total Students</span>
-                            <span
-                                className="text-2xl font-bold">{school?.studentsCount ? school.studentsCount : '876'}</span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                            <span className="text-sm font-medium">Total Teachers</span>
-                            <span
-                                className="text-2xl font-bold">{school?.teachersCount ? school.teachersCount : '34'}</span>
-                        </div>
-                        {/*<div className="flex justify-between items-center">*/}
-                        {/*    <span className="text-sm font-medium">Monthly Revenue</span>*/}
-                        {/*    <span className="text-2xl font-bold">${school.revenue.toLocaleString()}</span>*/}
-                        {/*</div>*/}
-                        <div className="flex items-start gap-3">
-                            <Award className="h-5 w-5 text-muted-foreground mt-0.5"/>
-                            <div className="flex-1">
-                                <p className="text-sm font-medium">Pass Rate</p>
-                                <p className="text-sm text-muted-foreground">87.5%</p>
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
+                </div>
             </div>
 
-            {/* Features & Access Control */}
-            <Card>
-                <CardHeader>
-                    <CardTitle>Features & Access Control</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div className="space-y-4">
-                        <p className="text-sm text-muted-foreground mb-4">
-                            Control which features this school can access in their dashboard.
-                        </p>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="flex items-center justify-between p-3 border rounded-lg">
-                                <div>
-                                    <p className="text-sm font-medium">Applications Management</p>
-                                    <p className="text-xs text-muted-foreground">Manage student applications</p>
+            {/* Main Content Tabs */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                {/* Left Column: Detailed Info */}
+                <div className="lg:col-span-2 space-y-8">
+                    <Tabs defaultValue="overview" className="w-full">
+                        <TabsList className="bg-muted/50 p-1 rounded-xl mb-6">
+                            <TabsTrigger value="overview" className="rounded-lg px-6 py-2">Overview</TabsTrigger>
+                            <TabsTrigger value="features" className="rounded-lg px-6 py-2">Features</TabsTrigger>
+                            <TabsTrigger value="academic" className="rounded-lg px-6 py-2">Academics</TabsTrigger>
+                        </TabsList>
+
+                        <TabsContent value="overview" className="space-y-6">
+                            <Card className="border-none bg-muted/30 shadow-none">
+                                <CardHeader>
+                                    <CardTitle className="text-xl">About the Institution</CardTitle>
+                                </CardHeader>
+                                <CardContent className="space-y-6">
+                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+                                        <div>
+                                            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Pass Rate</p>
+                                            <p className="text-2xl font-bold text-primary">{school.passRate || 'N/A'}%</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Annual Fees</p>
+                                            <p className="text-2xl font-bold">R{(school.annualFees || 0).toLocaleString()}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Total Capacity</p>
+                                            <p className="text-2xl font-bold">1,200</p>
+                                        </div>
+                                    </div>
+                                    
+                                    <Separator className="opacity-50" />
+                                    
+                                    <div className="space-y-2">
+                                        <p className="text-sm font-semibold">Admission Requirements</p>
+                                        <p className="text-sm text-muted-foreground leading-relaxed italic">
+                                            {school.admissionRequirements || "Standard requirements apply. Contact administration for details."}
+                                        </p>
+                                    </div>
+                                </CardContent>
+                            </Card>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <Card className="border-none bg-muted/30 shadow-none">
+                                    <CardHeader className="pb-2">
+                                        <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                                            <Award className="h-4 w-4 text-primary" />
+                                            Phases Offered
+                                        </CardTitle>
+                                    </CardHeader>
+                                    <CardContent>
+                                        <div className="flex flex-wrap gap-2">
+                                            {school.phase?.map(p => <Badge key={p} variant="outline" className="bg-background">{p}</Badge>) || 'None'}
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                                <Card className="border-none bg-muted/30 shadow-none">
+                                    <CardHeader className="pb-2">
+                                        <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                                            <GraduationCap className="h-4 w-4 text-primary" />
+                                            Grades
+                                        </CardTitle>
+                                    </CardHeader>
+                                    <CardContent>
+                                        <div className="flex flex-wrap gap-2 text-xs">
+                                            {school.gradesOffered?.map(g => <Badge key={g} variant="outline" className="bg-background">{g}</Badge>) || 'None'}
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            </div>
+                        </TabsContent>
+
+                        <TabsContent value="features" className="space-y-6">
+                            <Card className="border-none bg-muted/30 shadow-none">
+                                <CardHeader>
+                                    <CardTitle className="text-xl">Dashboard Capabilities</CardTitle>
+                                    <p className="text-sm text-muted-foreground">Manage specific module access for this school's dashboard.</p>
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        {Object.entries(features).map(([key, value]) => (
+                                            <div key={key} className="flex items-center justify-between p-4 rounded-xl bg-background border border-border/40 hover:border-primary/40 transition-colors">
+                                                <div className="space-y-0.5">
+                                                    <p className="text-sm font-bold capitalize">{key.replace(/([A-Z])/g, ' $1')}</p>
+                                                    <p className="text-xs text-muted-foreground">Enable module access</p>
+                                                </div>
+                                                <Switch checked={value} onCheckedChange={() => handleFeatureToggle(key as keyof typeof features)} />
+                                            </div>
+                                        ))}
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        </TabsContent>
+
+                        <TabsContent value="academic" className="space-y-6">
+                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <Card className="border-none bg-muted/30 shadow-none">
+                                    <CardHeader>
+                                        <CardTitle className="text-lg">Facilities</CardTitle>
+                                    </CardHeader>
+                                    <CardContent>
+                                        <ul className="space-y-2">
+                                            {school.facilities?.map(f => (
+                                                <li key={f} className="flex items-center gap-2 text-sm text-muted-foreground">
+                                                    <div className="h-1.5 w-1.5 rounded-full bg-primary" />
+                                                    {f}
+                                                </li>
+                                            )) || <p className="text-sm italic">No facilities listed</p>}
+                                        </ul>
+                                    </CardContent>
+                                </Card>
+                                <Card className="border-none bg-muted/30 shadow-none">
+                                    <CardHeader>
+                                        <CardTitle className="text-lg">Extracurriculars</CardTitle>
+                                    </CardHeader>
+                                    <CardContent>
+                                        <ul className="space-y-2">
+                                            {school.extracurriculars?.map(e => (
+                                                <li key={e} className="flex items-center gap-2 text-sm text-muted-foreground">
+                                                    <div className="h-1.5 w-1.5 rounded-full bg-primary" />
+                                                    {e}
+                                                </li>
+                                            )) || <p className="text-sm italic">No activities listed</p>}
+                                        </ul>
+                                    </CardContent>
+                                </Card>
+                             </div>
+                        </TabsContent>
+                    </Tabs>
+                </div>
+
+                {/* Right Column: Quick Contacts & Meta */}
+                <div className="space-y-6">
+                    <Card className="border shadow-lg bg-card">
+                        <CardHeader>
+                            <CardTitle className="text-lg">Quick Contacts</CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-6">
+                            <div className="space-y-4">
+                                <div className="flex items-center gap-4 group">
+                                    <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-white transition-colors">
+                                        <Mail className="h-5 w-5" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-xs font-semibold text-muted-foreground">Email</p>
+                                        <p className="text-sm font-medium truncate">{school.email}</p>
+                                    </div>
                                 </div>
-                                <Switch
-                                    checked={features.applications}
-                                    onCheckedChange={() => handleFeatureToggle('applications')}
-                                />
-                            </div>
-
-                            <div className="flex items-center justify-between p-3 border rounded-lg">
-                                <div>
-                                    <p className="text-sm font-medium">Student Management</p>
-                                    <p className="text-xs text-muted-foreground">View and manage students</p>
+                                <div className="flex items-center gap-4 group">
+                                    <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-white transition-colors">
+                                        <Phone className="h-5 w-5" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-xs font-semibold text-muted-foreground">Phone</p>
+                                        <p className="text-sm font-medium">{school.contactNumber || 'Not provided'}</p>
+                                    </div>
                                 </div>
-                                <Switch
-                                    checked={features.students}
-                                    onCheckedChange={() => handleFeatureToggle('students')}
-                                />
-                            </div>
-
-                            <div className="flex items-center justify-between p-3 border rounded-lg">
-                                <div>
-                                    <p className="text-sm font-medium">Teacher Management</p>
-                                    <p className="text-xs text-muted-foreground">View and manage teachers</p>
+                                <div className="flex items-center gap-4 group border-t pt-4">
+                                    <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+                                        <MapPin className="h-5 w-5" />
+                                    </div>
+                                    <div className="flex-1">
+                                        <p className="text-xs font-semibold text-muted-foreground">Address</p>
+                                        <p className="text-sm font-medium leading-tight">{school.address}</p>
+                                    </div>
                                 </div>
-                                <Switch
-                                    checked={features.teachers}
-                                    onCheckedChange={() => handleFeatureToggle('teachers')}
-                                />
                             </div>
+                        </CardContent>
+                    </Card>
 
-                            <div className="flex items-center justify-between p-3 border rounded-lg">
-                                <div>
-                                    <p className="text-sm font-medium">Parent Management</p>
-                                    <p className="text-xs text-muted-foreground">View and manage parents</p>
-                                </div>
-                                <Switch
-                                    checked={features.parents}
-                                    onCheckedChange={() => handleFeatureToggle('parents')}
-                                />
+                    <Card className="border bg-primary/5 dark:bg-primary/10 border-primary/10">
+                        <CardContent className="pt-6 space-y-4">
+                            <div className="flex justify-between items-center text-sm">
+                                <span className="text-muted-foreground">Tenant ID</span>
+                                <Badge variant="outline" className="font-mono text-[10px]">{school.tenant_id || 'N/A'}</Badge>
                             </div>
-
-                            <div className="flex items-center justify-between p-3 border rounded-lg">
-                                <div>
-                                    <p className="text-sm font-medium">Payment Management</p>
-                                    <p className="text-xs text-muted-foreground">Manage payments and invoices</p>
-                                </div>
-                                <Switch
-                                    checked={features.payments}
-                                    onCheckedChange={() => handleFeatureToggle('payments')}
-                                />
+                            <div className="flex justify-between items-center text-sm">
+                                <span className="text-muted-foreground">System Entry</span>
+                                <span className="font-semibold">{new Date(school.createdAt).toLocaleDateString()}</span>
                             </div>
-
-                            <div className="flex items-center justify-between p-3 border rounded-lg">
-                                <div>
-                                    <p className="text-sm font-medium">Calendar & Events</p>
-                                    <p className="text-xs text-muted-foreground">Schedule exams and events</p>
-                                </div>
-                                <Switch
-                                    checked={features.calendar}
-                                    onCheckedChange={() => handleFeatureToggle('calendar')}
-                                />
+                            <Separator />
+                            <div className="text-center">
+                                <p className="text-[10px] text-muted-foreground uppercase tracking-[0.2em] font-bold">School ID</p>
+                                <p className="text-[10px] font-mono text-muted-foreground truncate px-4">{school.id}</p>
                             </div>
-
-                            <div className="flex items-center justify-between p-3 border rounded-lg">
-                                <div>
-                                    <p className="text-sm font-medium">Timetable</p>
-                                    <p className="text-xs text-muted-foreground">Manage class schedules</p>
-                                </div>
-                                <Switch
-                                    checked={features.timetable}
-                                    onCheckedChange={() => handleFeatureToggle('timetable')}
-                                />
-                            </div>
-
-                            <div className="flex items-center justify-between p-3 border rounded-lg">
-                                <div>
-                                    <p className="text-sm font-medium">Announcements</p>
-                                    <p className="text-xs text-muted-foreground">Send announcements</p>
-                                </div>
-                                <Switch
-                                    checked={features.announcements}
-                                    onCheckedChange={() => handleFeatureToggle('announcements')}
-                                />
-                            </div>
-
-                            <div className="flex items-center justify-between p-3 border rounded-lg">
-                                <div>
-                                    <p className="text-sm font-medium">Activity Log</p>
-                                    <p className="text-xs text-muted-foreground">View audit trail</p>
-                                </div>
-                                <Switch
-                                    checked={features.activityLog}
-                                    onCheckedChange={() => handleFeatureToggle('activityLog')}
-                                />
-                            </div>
-                        </div>
-                    </div>
-                </CardContent>
-            </Card>
-
-            {/* Media Assets */}
-            <Card>
-                <CardHeader>
-                    <CardTitle>Media Assets</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="space-y-2">
-                            <p className="text-sm font-medium">School Logo</p>
-                            <div className="border rounded-lg p-8 flex items-center justify-center bg-muted/30">
-                                <ImageIcon className="h-12 w-12 text-muted-foreground"/>
-                            </div>
-                            <p className="text-xs text-muted-foreground">No logo uploaded</p>
-                        </div>
-                        <div className="space-y-2">
-                            <p className="text-sm font-medium">School Banner</p>
-                            <div className="border rounded-lg p-8 flex items-center justify-center bg-muted/30">
-                                <ImageIcon className="h-12 w-12 text-muted-foreground"/>
-                            </div>
-                            <p className="text-xs text-muted-foreground">No banner uploaded</p>
-                        </div>
-                    </div>
-                </CardContent>
-            </Card>
-
-            {/* Additional Information */}
-            <Card>
-                <CardHeader>
-                    <CardTitle>Additional Information</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                    <div className="flex justify-between items-center">
-                        <span className="text-sm font-medium">Joined Date</span>
-                        <span
-                            className="text-sm text-muted-foreground">{new Date(school.joinedDate).toLocaleDateString()}</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                        <span className="text-sm font-medium">School ID</span>
-                        <span className="text-sm text-muted-foreground">{school.id}</span>
-                    </div>
-                </CardContent>
-            </Card>
+                        </CardContent>
+                    </Card>
+                </div>
+            </div>
 
             {/* Edit Dialog */}
             <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>

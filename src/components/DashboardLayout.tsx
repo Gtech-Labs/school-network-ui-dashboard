@@ -56,34 +56,34 @@ const adminNavItems: NavItem[] = [
   // Main
   { labelKey: 'nav.overview', path: '/admin', icon: LayoutDashboard, section: 'main' },
   // { labelKey: 'nav.analytics', path: '/admin/analytics', icon: BarChart3, section: 'main' },
-  
+
   // Management
   { labelKey: 'nav.schools', path: '/admin/schools', icon: School, section: 'management' },
   { labelKey: 'nav.users', path: '/admin/users', icon: Users, section: 'management' },
   // { labelKey: 'nav.subscriptions', path: '/admin/subscriptions', icon: Building2, section: 'management' },
-  
+
   // Financial
   { labelKey: 'nav.billing', path: '/admin/billing', icon: CreditCard, section: 'financial' },
   { labelKey: 'nav.invoices', path: '/admin/invoices', icon: FileBarChart, section: 'financial' },
   // { labelKey: 'nav.revenue', path: '/admin/revenue', icon: Wallet, section: 'financial' },
-  
+
   // Communication
   { labelKey: 'nav.notifications', path: '/admin/notifications', icon: Bell, section: 'communication' },
   { labelKey: 'nav.announcements', path: '/admin/announcements', icon: Megaphone, section: 'communication' },
   // { labelKey: 'nav.messages', path: '/admin/messages', icon: MessageSquare, section: 'communication' },
   // { labelKey: 'nav.emailTemplates', path: '/admin/email-templates', icon: Mail, section: 'communication' },
-  
+
   // System
   { labelKey: 'nav.activityLog', path: '/admin/activity-log', icon: Activity, section: 'system' },
   // { labelKey: 'nav.security', path: '/admin/security', icon: Shield, section: 'system' },
   // { labelKey: 'nav.permissions', path: '/admin/permissions', icon: Lock, section: 'system' },
   // { labelKey: 'nav.integrations', path: '/admin/integrations', icon: Zap, section: 'system' },
   // { labelKey: 'nav.database', path: '/admin/database', icon: Database, section: 'system' },
-  
+
   // Settings
-  // { labelKey: 'nav.settings', path: '/admin/settings', icon: Settings, section: 'settings' },
-  // { labelKey: 'nav.localization', path: '/admin/localization', icon: Globe, section: 'settings' },
-  // { labelKey: 'nav.support', path: '/admin/support', icon: HelpCircle, section: 'settings' },
+  { labelKey: 'nav.settings', path: '/admin/settings', icon: Settings, section: 'settings' },
+  //{ labelKey: 'nav.localization', path: '/admin/localization', icon: Globe, section: 'settings' },
+  //{ labelKey: 'nav.support', path: '/admin/support', icon: HelpCircle, section: 'settings' },
 ];
 
 const allSchoolNavItems: NavItem[] = [
@@ -99,6 +99,7 @@ const allSchoolNavItems: NavItem[] = [
   { labelKey: 'nav.timetable', path: '/school/timetable', icon: Calendar },
   { labelKey: 'nav.calendar', path: '/school/calendar', icon: BookOpen },
   { labelKey: 'nav.activityLog', path: '/school/activity-log', icon: Activity },
+  { labelKey: 'nav.settings', path: '/school/settings', icon: Settings },
 ];
 
 const featureToNavMap: Record<string, string> = {
@@ -115,31 +116,42 @@ const featureToNavMap: Record<string, string> = {
   activityLog: '/school/activity-log',
 };
 
+import { useApiQuery } from '@/hooks/use-api-query.ts';
+import { useSchoolId } from '@/hooks/schools/school.hook.ts';
+
 export function DashboardLayout({ role }: DashboardLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const navigate = useNavigate();
-  const {logout} = useAuth();
+  const { logout, user } = useAuth();
   const { t } = useTranslation();
-  
+  const schoolId = useSchoolId(user?.sub);
+
+  const { data: schoolResponse } = useApiQuery<any>(
+    ['school', schoolId],
+    `/schools/${schoolId}`,
+    { enabled: !!schoolId && role === 'school' }
+  );
+
+  const school = schoolResponse;
+
   // Get filtered nav items based on enabled features for school role
   const navItems = role === 'admin' ? adminNavItems : (() => {
-    const schoolId = getCurrentSchoolId();
     const features = getSchoolFeatures(schoolId);
-    
+
     return allSchoolNavItems.filter(item => {
-      // Always show Overview
-      if (item.path === '/school') return true;
-      
+      // Always show Overview and Settings
+      if (item.path === '/school' || item.path === '/school/settings') return true;
+
       // Check if feature is enabled
       const featureKey = Object.keys(featureToNavMap).find(
         key => featureToNavMap[key] === item.path
       );
-      
+
       if (featureKey) {
         return features[featureKey as keyof typeof features];
       }
-      
+
       return true;
     });
   })();
@@ -151,7 +163,7 @@ export function DashboardLayout({ role }: DashboardLayoutProps) {
       if (!mobile) setSidebarOpen(true);
       else setSidebarOpen(false);
     };
-    
+
     checkMobile();
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
@@ -181,15 +193,23 @@ export function DashboardLayout({ role }: DashboardLayoutProps) {
               ? 'left-0 top-0 h-full w-64 translate-x-0 rounded-none'
               : 'left-0 top-0 h-full w-64 -translate-x-full rounded-none'
             : sidebarOpen
-            ? 'left-4 top-4 h-[calc(100vh-2rem)] w-60 rounded-2xl'
-            : 'left-4 top-4 h-[calc(100vh-2rem)] w-16 rounded-2xl'
+              ? 'left-4 top-4 h-[calc(100vh-2rem)] w-60 rounded-2xl'
+              : 'left-4 top-4 h-[calc(100vh-2rem)] w-16 rounded-2xl'
         )}
       >
         <div className="flex h-16 items-center justify-between border-b border-border/40 px-4 shrink-0">
           {(sidebarOpen || !isMobile) && (
             <div className="flex items-center gap-2">
-              <GraduationCap className="h-7 w-7 text-primary" />
-              {sidebarOpen && <span className="text-xl font-bold tracking-tight">{t('dashboard.schoolNetwork')}</span>}
+              {school?.logoUrl ? (
+                <div className="h-8 w-8 rounded-lg overflow-hidden border border-border/50 bg-white p-0.5">
+                  <img src={school.logoUrl} alt="Logo" className="h-full w-full object-contain" />
+                </div>
+              ) : (
+                <GraduationCap className="h-7 w-7 text-primary" />
+              )}
+              {sidebarOpen && <span className="text-xl font-bold tracking-tight truncate max-w-[140px]">
+                {school?.name || t('dashboard.schoolNetwork')}
+              </span>}
             </div>
           )}
           {!isMobile && (
@@ -239,8 +259,12 @@ export function DashboardLayout({ role }: DashboardLayoutProps) {
             />
             {sidebarOpen && (
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate">Grace Kalombo</p>
-                <p className="text-xs text-muted-foreground truncate">grace@school-network.co.za</p>
+                <p className="text-sm font-medium truncate">
+                  {user && 'firstName' in user ? `${(user as any).firstName} ${(user as any).lastName}` : user?.email ? (user as any).email.split('@')[0] : 'User'}
+                </p>
+                <p className="text-xs text-muted-foreground truncate">
+                  {(user as any)?.email || 'user@school-network.co.za'}
+                </p>
               </div>
             )}
           </div>

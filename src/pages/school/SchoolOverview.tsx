@@ -13,6 +13,8 @@ import {useApiQuery} from "@/hooks/use-api-query.ts";
 import {useAuth} from "@/context/AuthContext.tsx";
 import {useSchoolId} from "@/hooks/schools/school.hook.ts";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useInvoiceTotals } from "@/hooks/finance.hook";
+import { formatCurrency } from "@/lib/currency";
 
 
 export default function SchoolOverview() {
@@ -51,7 +53,11 @@ export default function SchoolOverview() {
 
     const teachersList: any[] = teachersResponse?.data || [];
     const totalTeachersCount = teachersResponse?.count ?? teachersList.length ?? 0;
-    const pendingPayments = 0; // Placeholder until payments are integrated
+    
+    const { data: totalsData, isLoading: totalsLoading } = useInvoiceTotals({ schoolId: schoolId || '' });
+    const feesPaid = totalsData?.totalPaid || 0;
+    const feesOutstanding = totalsData?.totalUnpaid || 0;
+    const totalFees = totalsData?.totalRevenue || 0;
 
 
     return (
@@ -90,8 +96,8 @@ export default function SchoolOverview() {
                             colorVariant="green"
                         />
                         <StatCard
-                            title={t('school.overview.pendingPayments')}
-                            value={pendingPayments}
+                            title={t('school.payments.pending')}
+                            value={totalsLoading ? <Skeleton className="h-8 w-24" /> : formatCurrency(feesOutstanding)}
                             icon={Banknote}
                             colorVariant="orange"
                         />

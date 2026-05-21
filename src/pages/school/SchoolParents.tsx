@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { format } from 'date-fns';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -50,7 +51,7 @@ export default function SchoolParents() {
   const parents = parentsData?.data || [];
 
   const filteredParents = parents.filter(
-    (parent: any) =>
+    (parent: Parent) =>
       parent.fullName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       parent.email?.toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -60,7 +61,7 @@ export default function SchoolParents() {
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
   const paginatedParents = filteredParents.slice(startIndex, startIndex + ITEMS_PER_PAGE);
 
-  const handleSendEmail = (parent: any) => {
+  const handleSendEmail = (parent: Parent) => {
     setSelectedParent(parent);
     setEmailDialogOpen(true);
   };
@@ -117,7 +118,7 @@ export default function SchoolParents() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {parents.reduce((acc: number, p: any) => acc + (p.students?.length || 0), 0)}
+              {parents.reduce((acc: number, p: Parent) => acc + (p.students?.length || 0), 0)}
             </div>
             <p className="text-xs text-muted-foreground">Total students with linked parents</p>
           </CardContent>
@@ -128,7 +129,7 @@ export default function SchoolParents() {
             <MessageSquare className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{parents.filter((p: any) => p.email).length}</div>
+            <div className="text-2xl font-bold">{parents.filter((p: Parent) => p.email).length}</div>
             <p className="text-xs text-muted-foreground">{t('school.parents.parentsWithEmail')}</p>
           </CardContent>
         </Card>
@@ -155,9 +156,11 @@ export default function SchoolParents() {
               <TableHeader>
                 <TableRow>
                   <TableHead className="whitespace-nowrap">{t('school.parents.parentName')}</TableHead>
+                  <TableHead className="whitespace-nowrap">ID Number</TableHead>
                   <TableHead className="whitespace-nowrap">Relationship</TableHead>
                   <TableHead className="whitespace-nowrap">{t('school.parents.children')}</TableHead>
                   <TableHead className="whitespace-nowrap min-w-[200px]">{t('school.parents.contactInformation')}</TableHead>
+                  <TableHead className="whitespace-nowrap">Registered On</TableHead>
                   <TableHead className="whitespace-nowrap">Status</TableHead>
                   <TableHead className="text-right whitespace-nowrap">{t('common.actions')}</TableHead>
                 </TableRow>
@@ -167,25 +170,28 @@ export default function SchoolParents() {
                   Array.from({ length: 5 }).map((_, i) => (
                     <TableRow key={i}>
                       <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-28" /></TableCell>
                       <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                       <TableCell><Skeleton className="h-4 w-40" /></TableCell>
                       <TableCell><Skeleton className="h-10 w-48" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-28" /></TableCell>
                       <TableCell><Skeleton className="h-6 w-20" /></TableCell>
                       <TableCell className="text-right"><Skeleton className="h-9 w-24 ml-auto" /></TableCell>
                     </TableRow>
                   ))
                 ) : paginatedParents.length > 0 ? (
-                  paginatedParents.map((parent: any) => (
+                  paginatedParents.map((parent: Parent) => (
                     <TableRow
                       key={parent.id}
                       className="cursor-pointer hover:bg-muted/50"
                       onClick={() => navigate(`/school/parents/${parent.id}`)}
                     >
                       <TableCell className="font-medium whitespace-nowrap">{parent.fullName}</TableCell>
+                      <TableCell className="whitespace-nowrap font-mono text-xs">{parent.idNumber || 'N/A'}</TableCell>
                       <TableCell className="whitespace-nowrap">{parent.relationship}</TableCell>
                       <TableCell>
                         <div className="flex flex-wrap gap-1 max-w-[200px]">
-                          {parent.students?.map((student: any) => (
+                          {parent.students?.map((student: { id: string; fullName: string }) => (
                             <Badge key={student.id} variant="outline" className="text-xs">
                               {student.fullName}
                             </Badge>
@@ -203,6 +209,11 @@ export default function SchoolParents() {
                             <span className="whitespace-nowrap">{parent.phone}</span>
                           </div>
                         </div>
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+                        {parent.user?.createdAt || parent.createdAt
+                          ? format(new Date(parent.user?.createdAt || parent.createdAt), 'MMM dd, yyyy HH:mm')
+                          : 'N/A'}
                       </TableCell>
                       <TableCell>
                         <Badge variant={parent.status === 'Active' ? 'default' : 'secondary'}>
@@ -238,7 +249,7 @@ export default function SchoolParents() {
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={6} className="h-32 text-center text-muted-foreground italic">
+                    <TableCell colSpan={8} className="h-32 text-center text-muted-foreground italic">
                       No parents found.
                     </TableCell>
                   </TableRow>

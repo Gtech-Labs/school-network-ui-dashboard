@@ -30,13 +30,16 @@ import {
     ChevronLeft,
     ChevronRight,
     Upload,
-    UserPlus
+    UserPlus,
+    Loader2,
+    AlertCircle
 } from 'lucide-react';
 
 import {toast} from 'sonner';
 import {useApiQuery} from "@/hooks/use-api-query.ts";
 import {useApiMutation} from "@/hooks/use-api-mutation.ts";
 import {useQueryClient} from "@tanstack/react-query";
+import {cn} from "@/lib/utils";
 
 const ITEMS_PER_PAGE = 9;
 
@@ -49,6 +52,16 @@ export default function AdminUsers() {
     const [addMode, setAddMode] = useState<AddMode>('choose');
     const [currentPage, setCurrentPage] = useState(1);
     const queryClient = useQueryClient();
+
+    // New states for form validation and API feedback
+    const [errors, setErrors] = useState<{
+        name?: string;
+        email?: string;
+        phone?: string;
+        role?: string;
+        school?: string;
+    }>({});
+    const [formError, setFormError] = useState<string | null>(null);
 
     const {mutate, isPending, error: createUserError} = useApiMutation<never>();
 
@@ -80,31 +93,112 @@ export default function AdminUsers() {
     const handleCloseDialog = () => {
         setAddDialogOpen(false);
         setAddMode('choose');
+        setErrors({});
+        setFormError(null);
+    };
+
+    const changeAddMode = (mode: AddMode) => {
+        setAddMode(mode);
+        setErrors({});
+        setFormError(null);
     };
 
     const handleAddUser = (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
+        setErrors({});
+        setFormError(null);
+
         const formData = new FormData(e.currentTarget);
-        const payload = {
-          name: formData.get('name') as string,
-          email: formData.get('email') as string,
-          role: formData.get('role') as string,
-          tenant_id: formData.get('school') as string,
-          phone: formData.get('phone') as string,
-          password: 'password', //Generate a password and send it via email or a link to set the password.
-          schoolId: schools?.find((school) => school.tenant_id === formData.get('school'))?.id || '',
+        const name = formData.get('name') as string;
+        const email = formData.get('email') as string;
+        const phone = formData.get('phone') as string;
+        const role = formData.get('role') as string;
+        const tenant_id = formData.get('school') as string;
+
+        const newErrors: typeof errors = {};
+
+        if (!name || name.trim().length < 2) {
+            newErrors.name = 'Name must be at least 2 characters';
         }
+        if (!email) {
+            newErrors.email = 'Email address is required';
+        } else if (!/\S+@\S+\.\S+/.test(email)) {
+            newErrors.email = 'Provide a valid email address';
+        }
+        if (!phone) {
+            newErrors.phone = 'Phone number is required';
+        } else if (!/^\+?[0-9\s-]{7,15}$/.test(phone)) {
+            newErrors.phone = 'Provide a valid phone number (e.g. +27840453471)';
+        }
+        if (!role) {
+            newErrors.role = 'Role selection is required';
+        }
+        if (!tenant_id) {
+            newErrors.school = 'School selection is required';
+        }
+
+        if (Object.keys(newErrors).length > 0) {
+            setErrors(newErrors);
+            toast.error("Please correct the errors in the form.");
+            return;
+        }
+
+        const payload = {
+          name,
+          email,
+          role,
+          tenant_id,
+          phone,
+          password: 'password', //Generate a password and send it via email or a link to set the password.
+          schoolId: schools?.find((school) => school.tenant_id === tenant_id)?.id || '',
+        };
+
         mutate({method: 'POST', endpoint: `auth/signup`, data: payload}, {
           onSuccess: () => {
-          queryClient.invalidateQueries({queryKey: ['user']}).then(r => console.log('invalidated'));
-          toast.success(`${payload.name} updated successfully`);
-          handleCloseDialog();
-        },
-        onError: (err) => {
-          toast.error("Failed to update school");
-          console.error(err);
-        }
-      });
+              queryClient.invalidateQueries({queryKey: ['users']});
+              toast.success(`${payload.name} created successfully`);
+              handleCloseDialog();
+          },
+          onError: (err: Error & { message?: string | string[] }) => {
+              console.error(err);
+              const errMsg = err.message || 'An error occurred while creating user';
+              
+              // Handle server-side validation error matching
+              const serverErrors: typeof errors = {};
+              let hasFieldErrors = false;
+
+              // Parse array or single string from NestJS validator
+              const errorsList = Array.isArray(err.message) ? err.message : [errMsg];
+              
+              errorsList.forEach((message: string) => {
+                  const lowerMsg = message.toLowerCase();
+                  if (lowerMsg.includes('email')) {
+                      serverErrors.email = message;
+                      hasFieldErrors = true;
+                  } else if (lowerMsg.includes('phone')) {
+                      serverErrors.phone = message;
+                      hasFieldErrors = true;
+                  } else if (lowerMsg.includes('name')) {
+                      serverErrors.name = message;
+                      hasFieldErrors = true;
+                  } else if (lowerMsg.includes('role')) {
+                      serverErrors.role = message;
+                      hasFieldErrors = true;
+                  } else if (lowerMsg.includes('school') || lowerMsg.includes('tenant')) {
+                      serverErrors.school = message;
+                      hasFieldErrors = true;
+                  }
+              });
+
+              if (hasFieldErrors) {
+                  setErrors(serverErrors);
+                  toast.error("Validation failed. Please check the fields.");
+              } else {
+                  setFormError(errMsg);
+                  toast.error(errMsg);
+              }
+          }
+        });
     };
 
     const handleBulkUpload = () => {
@@ -298,15 +392,25 @@ export default function AdminUsers() {
                         <DialogTitle>Add New User</DialogTitle>
                     </DialogHeader>
 
+                    {formError && (
+                        <div className="flex items-start gap-3 p-3.5 rounded-xl border border-destructive/20 bg-destructive/5 text-destructive text-sm animate-fade-in">
+                            <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" />
+                            <div className="space-y-1">
+                                <p className="font-semibold leading-none">Error</p>
+                                <p className="text-xs opacity-90 leading-relaxed">{formError}</p>
+                            </div>
+                        </div>
+                    )}
+
                     {addMode === 'choose' && (
                         <div className="grid grid-cols-2 gap-4 py-4">
                             <Button variant="outline" className="h-28 flex flex-col gap-2"
-                                    onClick={() => setAddMode('single')}>
+                                    onClick={() => changeAddMode('single')}>
                                 <UserPlus className="h-8 w-8"/>
                                 <span>Single User</span>
                             </Button>
                             <Button variant="outline" className="h-28 flex flex-col gap-2"
-                                    onClick={() => setAddMode('bulk')}>
+                                    onClick={() => changeAddMode('bulk')}>
                                 <Upload className="h-8 w-8"/>
                                 <span>Bulk Upload</span>
                             </Button>
@@ -316,59 +420,142 @@ export default function AdminUsers() {
                     {addMode === 'single' && (
                         <form onSubmit={handleAddUser} className="space-y-4">
                             <div>
-                                <Label htmlFor="name">Name</Label>
-                                <Input id="name" name="name" required/>
+                                <Label htmlFor="name" className={cn(errors.name && "text-destructive")}>Name</Label>
+                                <div className="relative mt-1">
+                                    <Input
+                                        id="name"
+                                        name="name"
+                                        disabled={isPending}
+                                        className={cn(
+                                            errors.name && "border-destructive focus-visible:ring-destructive bg-destructive/5 animate-shake pr-10"
+                                        )}
+                                        placeholder="Full Name"
+                                    />
+                                    {errors.name && (
+                                        <div className="absolute right-3 top-1/2 -translate-y-1/2 text-destructive">
+                                            <AlertCircle className="h-4 w-4" />
+                                        </div>
+                                    )}
+                                </div>
+                                {errors.name && (
+                                    <p className="text-xs font-medium text-destructive mt-1.5 flex items-center gap-1 animate-fade-in">
+                                        {errors.name}
+                                    </p>
+                                )}
                             </div>
                             <div>
-                                <Label htmlFor="email">Email</Label>
-                                <Input id="email" name="email" type="email" required/>
+                                <Label htmlFor="email" className={cn(errors.email && "text-destructive")}>Email</Label>
+                                <div className="relative mt-1">
+                                    <Input
+                                        id="email"
+                                        name="email"
+                                        type="email"
+                                        disabled={isPending}
+                                        className={cn(
+                                            errors.email && "border-destructive focus-visible:ring-destructive bg-destructive/5 animate-shake pr-10"
+                                        )}
+                                        placeholder="user@example.com"
+                                    />
+                                    {errors.email && (
+                                        <div className="absolute right-3 top-1/2 -translate-y-1/2 text-destructive">
+                                            <AlertCircle className="h-4 w-4" />
+                                        </div>
+                                    )}
+                                </div>
+                                {errors.email && (
+                                    <p className="text-xs font-medium text-destructive mt-1.5 flex items-center gap-1 animate-fade-in">
+                                        {errors.email}
+                                    </p>
+                                )}
                             </div>
                             <div>
-                                <Label htmlFor="phone">Phone</Label>
-                                <Input id="phone" name="phone" type="text" required/>
+                                <Label htmlFor="phone" className={cn(errors.phone && "text-destructive")}>Phone</Label>
+                                <div className="relative mt-1">
+                                    <Input
+                                        id="phone"
+                                        name="phone"
+                                        type="text"
+                                        disabled={isPending}
+                                        className={cn(
+                                            errors.phone && "border-destructive focus-visible:ring-destructive bg-destructive/5 animate-shake pr-10"
+                                        )}
+                                        placeholder="+27840453471"
+                                    />
+                                    {errors.phone && (
+                                        <div className="absolute right-3 top-1/2 -translate-y-1/2 text-destructive">
+                                            <AlertCircle className="h-4 w-4" />
+                                        </div>
+                                    )}
+                                </div>
+                                {errors.phone && (
+                                    <p className="text-xs font-medium text-destructive mt-1.5 flex items-center gap-1 animate-fade-in">
+                                        {errors.phone}
+                                    </p>
+                                )}
                             </div>
                             <div>
-                                <Label htmlFor="role">Role</Label>
-                                <Select name="role" required>
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Select role"/>
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="Admin">Admin</SelectItem>
-                                        <SelectItem value="SuperAdmin">Super Admin</SelectItem>
-                                        <SelectItem value="SchoolAdmin">School Admin</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                            <div>
-                                <div>
-                                    <Label htmlFor="school">School</Label>
-                                    {
-                                        schoolLoading ? <p>Loading schools...</p> : null
-                                    }
-                                    {
-                                        schoolIsError ? <p>Error loading schools</p> : null
-                                    }
-                                    <Select name="school" required>
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Select school"/>
+                                <Label htmlFor="role" className={cn(errors.role && "text-destructive")}>Role</Label>
+                                <div className="mt-1">
+                                    <Select name="role" disabled={isPending}>
+                                        <SelectTrigger className={cn(errors.role && "border-destructive focus:ring-destructive bg-destructive/5 animate-shake")}>
+                                            <SelectValue placeholder="Select role"/>
                                         </SelectTrigger>
                                         <SelectContent>
-                                            {
-                                                schools?.map((school, index) => (
-
-                                                    <SelectItem key={school?.id || index}
-                                                                value={school?.tenant_id}>{school?.name}</SelectItem>
-                                                ))
-                                            }
+                                            <SelectItem value="Admin">Admin</SelectItem>
+                                            <SelectItem value="SuperAdmin">Super Admin</SelectItem>
+                                            <SelectItem value="SchoolAdmin">School Admin</SelectItem>
                                         </SelectContent>
                                     </Select>
                                 </div>
+                                {errors.role && (
+                                    <p className="text-xs font-medium text-destructive mt-1.5 flex items-center gap-1 animate-fade-in">
+                                        {errors.role}
+                                    </p>
+                                )}
                             </div>
-                            <DialogFooter>
+                            <div>
+                                <Label htmlFor="school" className={cn(errors.school && "text-destructive")}>School</Label>
+                                <div className="mt-1">
+                                    {schoolLoading ? (
+                                        <p className="text-xs text-muted-foreground mt-1">Loading schools...</p>
+                                    ) : schoolIsError ? (
+                                        <p className="text-xs text-destructive mt-1">Error loading schools</p>
+                                    ) : null}
+                                    <Select name="school" disabled={isPending}>
+                                        <SelectTrigger className={cn(errors.school && "border-destructive focus:ring-destructive bg-destructive/5 animate-shake")}>
+                                            <SelectValue placeholder="Select school"/>
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {schools?.map((school, index) => (
+                                                <SelectItem key={school?.id || index} value={school?.tenant_id}>
+                                                    {school?.name}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                {errors.school && (
+                                    <p className="text-xs font-medium text-destructive mt-1.5 flex items-center gap-1 animate-fade-in">
+                                        {errors.school}
+                                    </p>
+                                )}
+                            </div>
+                            <DialogFooter className="pt-2">
                                 <Button variant="outline" type="button"
-                                        onClick={() => setAddMode('choose')}>Back</Button>
-                                <Button type="submit">Add User</Button>
+                                        onClick={() => changeAddMode('choose')}
+                                        disabled={isPending}>
+                                    Back
+                                </Button>
+                                <Button type="submit" disabled={isPending} className="min-w-[120px]">
+                                    {isPending ? (
+                                        <>
+                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                            Adding...
+                                        </>
+                                    ) : (
+                                        "Add User"
+                                    )}
+                                </Button>
                             </DialogFooter>
                         </form>
                     )}
@@ -378,10 +565,10 @@ export default function AdminUsers() {
                             <p className="text-sm text-muted-foreground">
                                 Upload a spreadsheet with columns: <strong>Name, Email, Role, School</strong>
                             </p>
-                            <Input type="file" accept=".csv,.xlsx,.xls"/>
+                            <Input type="file" accept=".csv,.xlsx,.xls" disabled={isPending} />
                             <DialogFooter>
-                                <Button variant="outline" onClick={() => setAddMode('choose')}>Back</Button>
-                                <Button onClick={handleBulkUpload}>
+                                <Button variant="outline" onClick={() => changeAddMode('choose')} disabled={isPending}>Back</Button>
+                                <Button onClick={handleBulkUpload} disabled={isPending}>
                                     <Upload className="h-4 w-4 mr-2"/>
                                     Import Users
                                 </Button>
