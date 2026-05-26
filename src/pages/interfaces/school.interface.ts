@@ -19,4 +19,15 @@ export interface SchoolPayload {
         name: string;
         code: string;
     }[];
+    // New registration compliance and identity fields (optional from backend)
+    registrationNumber?: string;
+    principalName?: string;
+    regCertificateUrl?: string;
+    proofOfAuthUrl?: string;
+    paymentsInvolved?: boolean;
+    bankName?: string;
+    accountNumber?: string;
+    accountType?: string;
+    branchCode?: string;
+    curriculum?: string;
 }

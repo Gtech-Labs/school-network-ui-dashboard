@@ -1,0 +1,1 @@
+import{a}from"./index-BOeqtr82.js";const o="http://localhost:3000",r=a.create({baseURL:o});r.interceptors.request.use(e=>{const t=localStorage.getItem("token");return t&&(e.headers.Authorization=`Bearer ${t}`),e});export{r as a};

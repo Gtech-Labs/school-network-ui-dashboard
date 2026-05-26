@@ -1,0 +1,1 @@
+import{a as t}from"./index-BOeqtr82.js";const e="http://localhost:3000",o=async s=>(await t.get(`${e}/users/get-user-with-profile/${s}`)).data,i=async s=>t.get(`${e}/users/get-by-email/${s}`);export{i as a,o as g};
