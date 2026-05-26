@@ -1,0 +1,47 @@
+/* 
+ * Söhne Font Family
+ * 
+ * This file is prepared for Söhne font integration.
+ * Söhne is a commercial font by Klim Type Foundry.
+ * 
+ * To use Söhne, you'll need to:
+ * 1. Purchase the font license from https://klim.co.nz/retail-fonts/soehne/
+ * 2. Add the font files to the /public/fonts/ directory
+ * 3. Uncomment and configure the @font-face declarations below
+ * 
+ * Example configuration (uncomment and adjust paths when you have the font files):
+ */
+
+/*
+@font-face {
+  font-family: 'Söhne';
+  src: url('/fonts/soehne-leicht.woff2') format('woff2'),
+       url('/fonts/soehne-leicht.woff') format('woff');
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Söhne';
+  src: url('/fonts/soehne-buch.woff2') format('woff2'),
+       url('/fonts/soehne-buch.woff') format('woff');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Söhne';
+  src: url('/fonts/soehne-halbfett.woff2') format('woff2'),
+       url('/fonts/soehne-halbfett.woff') format('woff');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+*/
+
+/* 
+ * Note: Until Söhne fonts are added, the system will fallback to Inter,
+ * which provides a similar modern, clean aesthetic.
+ */

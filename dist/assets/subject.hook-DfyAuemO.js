@@ -1,0 +1,1 @@
+import{u as t}from"./useQuery-C5gLnrcq.js";import{a as r}from"./index-BOeqtr82.js";const s="http://localhost:3000",a=()=>{const e=localStorage.getItem("token");return e?{Authorization:`Bearer ${e}`}:{}},n=e=>r.get(`${s}/schools/get-subjects`,{params:{schoolId:e},headers:a()}),i=e=>t({queryKey:["subjects",e],queryFn:async()=>e?(await n(e)).data:[],enabled:!!e});export{i as u};

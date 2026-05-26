@@ -1,0 +1,11 @@
+import{c as r,r as c,j as a}from"./index-DPU3vhVk.js";import{B as l}from"./button-BY8XSiZz.js";import{D as d,a as i,b as h,c as g}from"./dropdown-menu-DpUvENkW.js";import{u}from"./useTranslation-Csiy-ues.js";import{G as p}from"./globe-C-c3SbT4.js";/**
+ * @license lucide-react v0.462.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */const k=r("Moon",[["path",{d:"M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z",key:"a7tn18"}]]);/**
+ * @license lucide-react v0.462.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */const f=r("Sun",[["circle",{cx:"12",cy:"12",r:"4",key:"4exip2"}],["path",{d:"M12 2v2",key:"tus03m"}],["path",{d:"M12 20v2",key:"1lh1kg"}],["path",{d:"m4.93 4.93 1.41 1.41",key:"149t6j"}],["path",{d:"m17.66 17.66 1.41 1.41",key:"ptbguv"}],["path",{d:"M2 12h2",key:"1t8f8n"}],["path",{d:"M20 12h2",key:"1q8mjw"}],["path",{d:"m6.34 17.66-1.41 1.41",key:"1m8zz5"}],["path",{d:"m19.07 4.93-1.41 1.41",key:"1shlcs"}]]);function b(){const[t,n]=c.useState("light");c.useEffect(()=>{const e=localStorage.getItem("theme"),m=window.matchMedia("(prefers-color-scheme: dark)").matches,o=e||(m?"dark":"light");n(o),document.documentElement.classList.toggle("dark",o==="dark")},[]);const s=()=>{const e=t==="light"?"dark":"light";n(e),localStorage.setItem("theme",e),document.documentElement.classList.toggle("dark",e==="dark")};return a.jsx(l,{variant:"outline",size:"icon",onClick:s,children:t==="light"?a.jsx(k,{className:"h-4 w-4"}):a.jsx(f,{className:"h-4 w-4"})})}const x=[{code:"en",label:"English",flag:"🇬🇧"},{code:"fr",label:"Français",flag:"🇫🇷"},{code:"ar",label:"العربية",flag:"🇸🇦"},{code:"pt",label:"Português",flag:"🇵🇹"}];function L(){const{i18n:t}=u(),n=t.language,s=e=>{t.changeLanguage(e),document.documentElement.dir=e==="ar"?"rtl":"ltr"};return a.jsxs(d,{children:[a.jsx(i,{asChild:!0,children:a.jsx(l,{variant:"outline",size:"icon",className:"rounded-lg",children:a.jsx(p,{className:"h-4 w-4"})})}),a.jsx(h,{align:"end",className:"min-w-[140px]",children:x.map(e=>a.jsxs(g,{onClick:()=>s(e.code),className:n===e.code?"bg-accent":"",children:[a.jsx("span",{className:"mr-2",children:e.flag}),e.label]},e.code))})]})}export{L,b as T};
